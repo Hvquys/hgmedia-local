@@ -1,0 +1,32 @@
+                         Table "staging.resource_before_odoo"
+         Column         |            Type             | Collation | Nullable | Default 
+------------------------+-----------------------------+-----------+----------+---------
+ STT                    | text                        |           |          | 
+ HĐ                     | text                        |           |          | 
+ Tháng                  | text                        |           |          | 
+ Thể loại               | text                        |           |          | 
+ Subgenre               | text                        |           |          | 
+ Chất lượng             | text                        |           |          | 
+ Mã bài                 | text                        |           |          | 
+ Tên bài gốc            | text                        |           |          | 
+ Nghệ sỹ gốc            | text                        |           |          | 
+ Nghệ sỹ                | text                        |           |          | 
+ A&R phụ trách          | text                        |           |          | 
+ Chi phí đv: $          | text                        |           |          | 
+ Điểm trung bình        | text                        |           |          | 
+ Điểm trung bình A&R    | text                        |           |          | 
+ Ngày đặt hàng sản xuất | text                        |           |          | 
+ Ngày nghiệm thu        | text                        |           |          | 
+ Tình trạng nghiệm thu  | text                        |           |          | 
+ Tình trạng phát hành   | text                        |           |          | 
+ Ngày phát hành         | text                        |           |          | 
+ Tên bài phát hành      | text                        |           |          | 
+ Tình trạng vocal       | text                        |           |          | 
+ col_21                 | text                        |           |          | 
+ QLSX phụ trách         | text                        |           |          | 
+ ISRC                   | text                        |           |          | 
+ _source_id             | text                        |           |          | 
+ _source_sheet          | text                        |           |          | 
+ _batch_id              | text                        |           |          | 
+ _loaded_at             | timestamp without time zone |           |          | 
+

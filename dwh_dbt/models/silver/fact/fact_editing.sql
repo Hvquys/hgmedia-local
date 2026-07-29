@@ -4,7 +4,10 @@ select
     , e."Id" as editing_id
     , e."EditingFileId" as editing_code
     , r."ResourceFileId" as hg_stock_id
-    , row_number() over (partition by re."EditingId" order by re."StartTime") as position
+    , row_number() over (
+        partition by re."EditingId"
+        order by re."StartTime", re."Id"
+    ) as position
     , cast(re."EndTime" as numeric) - cast(re."StartTime" as numeric) as duration
 from {{ source('staging', 'resource_editings') }} re
 join {{ source('staging', 'editings') }} e on re."EditingId" = e."Id"

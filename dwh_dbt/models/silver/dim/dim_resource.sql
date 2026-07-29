@@ -11,8 +11,9 @@ select
     , nullif(trim(cast(detail_line_id as text)),'') as production_plan_detail_id
     , case
         when state = 'approved' and produce_state = 6 then 'Không nghiệm thu'
-        when state = 'approved' and produce_state != 6 then 'Đã nghiệm thu'
+        when state = 'approved' and produce_state is distinct from 6 then 'Đã nghiệm thu'
         when state = 'draft' then 'Đang sản xuất'
+        when state = 'rejected' then 'Không nghiệm thu'
         else null
       end as status
     , nullif(trim(cast(sale_order_id as text)),'') as so_id

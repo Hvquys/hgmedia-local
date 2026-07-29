@@ -180,6 +180,16 @@ db_sources:
     incremental: false
     target_staging_table: "staging.users"
     load_mode: "truncate"
+  - source_id: "tracking_video_publish_infos"
+    source_type: "sql"
+    connection: "hg_stock"
+    source_table: "tracking_video_publish_infos"
+    schema: "dbo"
+    watermark_column: null
+    incremental: false
+    target_staging_table: "staging.tracking_video_publish_infos"
+    load_mode: "truncate"
+    stream_to_staging: true;
 
   # ===== channel_organization =====
   - source_id: "channel"
@@ -190,6 +200,15 @@ db_sources:
     watermark_column: null
     incremental: false
     target_staging_table: "staging.channel"
+    load_mode: "truncate"
+  - source_id: "channeldepartment"
+    source_type: "sql"
+    connection: "channel_relationship"
+    source_table: "channel_department"
+    schema: "dbo"
+    watermark_column: null
+    incremental: false
+    target_staging_table: "staging.channeldepartment"
     load_mode: "truncate"
   - source_id: "company"
     source_type: "sql"
@@ -208,6 +227,15 @@ db_sources:
     watermark_column: null
     incremental: false
     target_staging_table: "staging.department"
+    load_mode: "truncate"
+  - source_id: "departmentlevel"
+    source_type: "sql"
+    connection: "channel_organization"
+    source_table: "DepartmentLevel"
+    schema: "dbo"
+    watermark_column: null
+    incremental: false
+    target_staging_table: "staging.departmentlevel"
     load_mode: "truncate"
   - source_id: "position"
     source_type: "sql"
@@ -275,11 +303,21 @@ db_sources:
     source_table: "Editings"
     schema: "dbo"
     stream_to_staging: true
-    custom_query: "SELECT Id, EditingFileId, Title, EditingSoftware, CreatedDate, UpdatedDate, CASE WHEN UpdatedDate IS NULL OR CreatedDate > UpdatedDate THEN CreatedDate ELSE UpdatedDate END AS _wm FROM dbo.Editings WHERE IsDeleted = 0"
+    custom_query: "SELECT Id, EditingFileId, Title, CreatedByUserId, EditingSoftware, CreatedDate, UpdatedDate, CASE WHEN UpdatedDate IS NULL OR CreatedDate > UpdatedDate THEN CreatedDate ELSE UpdatedDate END AS _wm FROM dbo.Editings WHERE IsDeleted = 0"
     watermark_column: "_wm"
     upsert_key: ["Id"]
     load_mode: "append"
     target_staging_table: "staging.editings"
+
+  - source_id: "user_editing"
+    source_type: "sql"
+    connection: "editing_management"
+    source_table: "User"
+    schema: "dbo"
+    watermark_column: null
+    incremental: false
+    target_staging_table: "staging.user_editing"
+    load_mode: "truncate"
 
   - source_id: "resource"
     source_type: "sql"
@@ -343,7 +381,6 @@ db_sources:
     source_table: "RecordingSound"
     schema: "dbo"
     stream_to_staging: true
-    custom_query: "SELECT Id, SongCode FROM dbo.RecordingSound WHERE IsDeleted = 0"
     watermark_column: null
     incremental: false
     load_mode: "truncate"
@@ -456,3 +493,14 @@ db_sources:
     incremental: false
     target_staging_table: "staging.channel_company"
     load_mode: "truncate"
+  
+  - source_id: "resource_files"
+    source_type: "sql"
+    connection: "hg_stock"
+    source_table: "resource_files"
+    schema: "dbo"
+    watermark_column: null
+    incremental: false
+    target_staging_table: "staging.resource_files"
+    load_mode: "truncate"
+    stream_to_staging: true

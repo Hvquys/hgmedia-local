@@ -1,4 +1,60 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# ==========================
+# Airflow
+# ==========================
+logs/
+airflow.db
+airflow-webserver.pid
+
+# ==========================
+# dbt
+# ==========================
+dwh_dbt/target/
+dwh_dbt/logs/
+dbt_packages/
+
+# ==========================
+# IDE
+# ==========================
+.vscode/
+.idea/
+*.swp
+
+# ==========================
+# Operating System
+# ==========================
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Secrets
+# ==========================
+config/gsheet_service_account.json
+.env
+.env.*
+
+# ==========================
+# Data
+# ==========================
+data/*.csv
 data/Untitled Discover session.csv
 data/fact_view_stream.csv
-*.csv
-config/gsheet_service_account.json
+
+# ==========================
+# Temporary files
+# ==========================
+*.log
+*.tmp
+*.bak

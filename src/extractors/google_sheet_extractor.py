@@ -15,7 +15,8 @@ Config mẫu (xem config/google_sheet_sources.yaml):
 import hashlib
 import json
 from typing import Optional
-
+import logging
+log = logging.getLogger(__name__)
 import pandas as pd
 
 from src.extractors.base import BaseExtractor, ExtractResult
@@ -58,7 +59,6 @@ class GoogleSheetExtractor(BaseExtractor):
         import io, openpyxl
         from googleapiclient.http import MediaIoBaseDownload
         cfg = self.source_config
-        ds = cfg.get("data_start_row", 2) - 1
 
         # CHẾ ĐỘ 1: 1 Google Sheet native theo spreadsheet_id -> dùng gspread
         if cfg.get("spreadsheet_id"):
@@ -67,9 +67,9 @@ class GoogleSheetExtractor(BaseExtractor):
             sh = client.open_by_key(cfg["spreadsheet_id"])
             pat = cfg.get("worksheet_pattern")
             tabs = [w for w in sh.worksheets() if pat in w.title] if pat \
-                   else [sh.worksheet(cfg["worksheet_name"]) if cfg.get("worksheet_name") else sh.sheet1]
+                else [sh.worksheet(cfg["worksheet_name"]) if cfg.get("worksheet_name") else sh.sheet1]
 
-            WANT = cfg.get("columns")   # danh sách cột cố định (theo header thật)
+            WANT = cfg.get("columns")
             hidx = cfg.get("header_row", 1) - 1
             out = []
             for ws in tabs:
@@ -85,7 +85,7 @@ class GoogleSheetExtractor(BaseExtractor):
                         out.append(list(WANT) + ["_year"])
                     for r in vals[hidx + 1:]:
                         row = [r[pos[c]] if c in pos and pos[c] < len(r) else "" for c in WANT]
-                        if any(x.strip() for x in row[:5]):       # bỏ dòng rỗng
+                        if any(x.strip() for x in row[:5]):
                             out.append(row + [yr])
                 else:
                     if not out:
@@ -93,7 +93,8 @@ class GoogleSheetExtractor(BaseExtractor):
                     for r in vals[hidx + 1:]:
                         out.append(r + [yr])
             return out
-        # CHẾ ĐỘ 2: folder .xlsm/.xlsx -> download qua Drive (giữ nguyên code cũ bên dưới)
+
+        # CHẾ ĐỘ 2: folder .xlsm/.xlsx -> download qua Drive
         XLSX = ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/vnd.ms-excel.sheet.macroenabled.12"]
         drive = self._drive_service()
@@ -101,14 +102,29 @@ class GoogleSheetExtractor(BaseExtractor):
             q=f"'{cfg['folder_id']}' in parents and trashed=false",
             fields="files(id,name,mimeType)", pageSize=1000,
             supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+        # thêm log để xem tất cả file trong folder kể cả không phải xlsx
+        resp = drive.files().list(
+            q=f"'{cfg['folder_id']}' in parents and trashed=false",
+            fields="files(id,name,mimeType)", pageSize=1000,
+            supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+        log.info(f"Tất cả file trong folder: {[(f['name'], f['mimeType']) for f in resp['files']]}")
         files = [f for f in resp["files"] if f["mimeType"] in XLSX]
+        log.info(f"[{cfg['source_id']}] Tìm thấy {len(files)} file trong folder")
+        for f in files:
+            log.info(f"[{cfg['source_id']}] File: {f['name']}")
 
-        WANT = ["Mã", "Tiêu đề", "Nghệ sĩ bài hát"]
-        KEY = "mã"   # cột mốc để dò dòng header
-        import logging
-        log = logging.getLogger(__name__)
-        drive = self._drive_service()
+        # filter theo file_name nếu có
+        if cfg.get("file_name"):
+            files = [f for f in files if f["name"] == cfg["file_name"]]
+
+        # đọc columns từ config, fallback về hardcode cũ
+        WANT = cfg.get("columns") or ["Mã", "Tiêu đề", "Nghệ sĩ bài hát"]
+        KEY = cfg.get("header_key", "mã")
+
+
+
         rows = []
+        headers = None
         for idx, f in enumerate(files, 1):
             buf = io.BytesIO()
             dl = MediaIoBaseDownload(buf, drive.files().get_media(fileId=f["id"], supportsAllDrives=True))
@@ -117,24 +133,46 @@ class GoogleSheetExtractor(BaseExtractor):
                 _, done = dl.next_chunk()
             buf.seek(0)
             wb = openpyxl.load_workbook(buf, data_only=True, read_only=True)
-            ws = wb[cfg["worksheet_name"]] if cfg.get("worksheet_name") else wb[wb.sheetnames[0]]
+            log.info(f"[{cfg['source_id']}] Các sheet trong {f['name']}: {wb.sheetnames}")
+            # chọn sheet theo worksheet_name nếu có, không thì lấy sheet đầu
+            if cfg.get("worksheet_name") and cfg["worksheet_name"] in wb.sheetnames:
+                ws = wb[cfg["worksheet_name"]]
+            else:
+                ws = wb[wb.sheetnames[0]]
+
             vals = [[("" if c is None else str(c).strip()) for c in r] for r in ws.iter_rows(values_only=True)]
+            # thêm trước dòng hidx = next(...)
+            log.info(f"[{cfg['source_id']}] Các dòng đầu của {f['name']}: {[vals[i][:5] for i in range(min(5, len(vals)))]}")
+            # tìm dòng header theo KEY
             hidx = next((i for i, r in enumerate(vals) if KEY in [c.lower() for c in r]), None)
             if hidx is None:
                 log.warning(f"[{cfg['source_id']}] SKIP {f['name']} (không thấy header '{KEY}')")
                 continue
-            hdr = [c.lower() for c in vals[hidx]]
-            pos = {w: hdr.index(w.lower()) for w in WANT if w.lower() in hdr}
-            repo = f["name"].rsplit(".", 1)[0]   # tên file (bỏ .xlsx/.xlsm) -> Repository
-            for r in vals[hidx+1:]:
+
+            hdr = [c for c in vals[hidx]]
+            # thêm sau dòng hdr = [c for c in vals[hidx]]
+            log.info(f"[{cfg['source_id']}] Headers trong {f['name']}: {hdr[:10]}")
+            hdr_lower = [c.lower() for c in hdr]
+            pos = {w: hdr_lower.index(w.lower()) for w in WANT if w.lower() in hdr_lower}
+
+            repo = f["name"].rsplit(".", 1)[0]
+
+            if headers is None:
+                headers = WANT + ["Repository"]
+
+            for r in vals[hidx + 1:]:
                 if not any((r[i].strip() if i < len(r) else "") for i in pos.values()):
                     continue
-                d = {w: (r[i] if i < len(r) else "") for w, i in pos.items()}
+                d = {w: (r[pos[w]] if w in pos and pos[w] < len(r) else "") for w in WANT}
                 d["Repository"] = repo
                 rows.append(d)
+
             log.info(f"[{cfg['source_id']}] ({idx}/{len(files)}) {f['name']}: +{len(vals)-hidx-1} dòng")
-        header = WANT + ["Repository"]
-        return [header] + [[d.get(h, "") for h in header] for d in rows]
+
+        if headers is None:
+            headers = WANT + ["Repository"]
+
+        return [headers] + [[d.get(h, "") for h in headers] for d in rows]
 
     def extract(self) -> ExtractResult:
         cfg = self.source_config

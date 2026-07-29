@@ -1,7 +1,7 @@
 -- silver.dim_order_employee  (target theo Data Dictionary — nguồn odoo.hr_employee)
 select
     {{ dbt_utils.generate_surrogate_key(['he.id']) }} as dim_order_employee_sk
-    , nullif(trim(cast(he.id as text)),'') as order_employee_id
+    , nullif(trim(cast(he.user_id as text)),'') as order_employee_id
     , nullif(trim(cast(hd.id as text)),'') as department_id
     , nullif(trim(cast(he.name as text)),'') as employee_name
     , null as team_name

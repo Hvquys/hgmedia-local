@@ -53,11 +53,9 @@ class StagingLoader:
         schema, table = staging_table.split(".")
 
         if load_mode == "truncate":
-            # replace = drop+create+insert: an toàn cả lần chạy đầu (bảng chưa tồn tại).
-            # Staging là lớp throwaway, dbt sẽ ép kiểu ở silver nên để pandas tự suy kiểu là đủ.
             with self.engine.begin() as conn:
                 conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-            df.to_sql(table, self.engine, schema=schema, if_exists="replace", index=False)
+            df.to_sql(table, self.engine, schema=schema, if_exists="replace", index=False, chunksize=5000)
 
         elif load_mode == "upsert":
             if not upsert_key:
@@ -65,7 +63,7 @@ class StagingLoader:
             self._upsert(df, schema, table, upsert_key)
 
         else:  # append (mặc định, dùng cho incremental)
-            df.to_sql(table, self.engine, schema=schema, if_exists="append", index=False)
+            df.to_sql(table, self.engine, schema=schema, if_exists="append", index=False, chunksize=5000)
 
         return len(df)
 

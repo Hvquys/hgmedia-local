@@ -10,9 +10,6 @@ test-paths: ["tests"]
 
 models:
   dwh_hgmedia:
-    staging:
-      +materialized: view
-      +schema: staging
     silver:
       dim:
         +materialized: table

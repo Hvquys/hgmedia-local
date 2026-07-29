@@ -7,13 +7,14 @@ with distro_isrc as (
 
 base as (
     select
-        {{ dbt_utils.generate_surrogate_key(['"ResourceFileId"','"ISRC"']) }} as dim_isrc_sk
-        , nullif(trim(cast("ResourceFileId" as text)), '') as hg_stock_id
-        , nullif(trim("ISRC"), '') as isrc
-        , row_number() over (partition by "ResourceFileId" order by "ISRC") as rn_stock
-        , row_number() over (partition by "ISRC" order by "ResourceFileId") as rn_isrc
-    from {{ source('staging', 'resource_file_info') }}
-    where nullif(trim("ISRC"), '') is not null
+        {{ dbt_utils.generate_surrogate_key(['xms.name', 'xms.isrc']) }} as dim_isrc_sk
+        , nullif(trim(xms.name), '') as hg_stock_id
+        , nullif(trim(xms.isrc), '') as isrc
+        , row_number() over (partition by xms.name order by xms.isrc) as rn_stock
+        , row_number() over (partition by xms.isrc order by xms.name) as rn_isrc
+    from {{ source('staging', 'x_music_song') }} xms
+    where xms.active is true
+      and nullif(trim(xms.isrc), '') is not null
 )
 
 select

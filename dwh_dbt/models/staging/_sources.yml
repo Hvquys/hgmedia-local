@@ -10,6 +10,7 @@ sources:
       - name: channel_project   # raw: Channel_Project (channel_project)
       - name: company   # raw: Company (channel_organization)
       - name: department   # raw: Department (channel_organization)
+      - name: departmentlevel # raw: DepartmentLevel (channel_organization)
       - name: distribution_media_history   # raw: distribution_media_history (hg_stock)
       - name: editings   # raw: Editings (editing_management)
       - name: groups   # raw: groups (hg_stock)
@@ -60,3 +61,9 @@ sources:
       - name: hr_job          # raw: hr_job (odoo_pg)
       - name: channel_user
       - name: channel_company
+      - name: resource_files
+      - name: tracking_video_publish_infos
+      - name: channeldepartment
+      - name: user_editing
+      - name: repository_name_alias   # bảng alias thủ công, insert tay, không qua EL
+      - name: resource_performance  # raw: file excel tracking video publish
