@@ -219,14 +219,21 @@ performance_resources as (
         , nullif(trim("Tên bài"), '') as resource_name
         , dr.repository_id
         , cast(null as text) as repository_type
-        , case 
+        , case
             when nullif(trim("Điểm nghiệm thu"), '') ~ '^[0-9]+(\.[0-9]+)?$'
             then cast("Điểm nghiệm thu" as numeric(18,2))
             else null
         end as acceptance_score
         , case
             when nullif(regexp_replace("Chi phí sx", '[^0-9.]', '', 'g'), '') ~ '^[0-9]+(\.[0-9]+)?$'
-            then cast(regexp_replace("Chi phí sx", '[^0-9.]', '', 'g') as numeric(18,2))
+            then cast(
+                case
+                    when cast(regexp_replace("Chi phí sx", '[^0-9.]', '', 'g') as numeric(18,2)) > 10000
+                        then cast(regexp_replace("Chi phí sx", '[^0-9.]', '', 'g') as numeric(18,2)) / 25000
+                    else cast(regexp_replace("Chi phí sx", '[^0-9.]', '', 'g') as numeric(18,2))
+                end
+                as numeric(18,2)
+            )
             else null
         end as acceptance_cost
         , cast(nullif(trim("Ngày nghiệm thu"), '') as timestamp) as acceptance_date

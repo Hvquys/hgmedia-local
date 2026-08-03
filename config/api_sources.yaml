@@ -1,0 +1,17 @@
+api_sources:
+  - source_id: "sale"
+    source_type: "api"
+    api_url: "https://192.168.8.125:3131/api/StreamAnalytics/sale-details-export"
+    verify_ssl: false
+    data_key: "data"
+    scroll_key: "scrollId"
+    has_more_key: "hasMore"
+    parallel_workers: 15    # 15 luồng, batch 1 xong rồi batch 2 chạy tiếp 5 tháng
+    date_from: "2025-06-01"
+    date_filter_column: "reportingPeriod"
+    api_date_from_param: "fromDate"      # ← tên param API nhận
+    api_date_to_param: "toDate"          # ← tên param API nhận
+    parallel_by: "month"                 # ← chạy song song theo tháng
+    target_staging_table: "staging.sale"
+    stream_to_staging: true
+    load_mode: "truncate"

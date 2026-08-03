@@ -28,6 +28,9 @@ def get_extractor(source_config: dict):
     if source_type == "sql":
         conn_cfg = get_connection(source_config["connection"])
         return SQLExtractor(source_config, conn_cfg)
+    if source_type == "api":
+        from src.extractors.api_extractor import ApiExtractor
+        return ApiExtractor(source_config)
 
     # elasticsearch: tạm bỏ qua theo yêu cầu hiện tại
     raise ValueError(f"source_type '{source_type}' chưa được hỗ trợ trong giai đoạn này")

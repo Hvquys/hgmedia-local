@@ -6,8 +6,7 @@ select
 from (
     select
         "YoutubeVideoId",
-        (regexp_match("Description", '(HG[A-Z0-9]{30,34})'))[1] as editing_code
+        nullif(trim("Code"),'') as editing_code
     from {{ source('staging','channel_video_info') }}
-    where "Description" ~ 'HG[A-Z0-9]{30,34}'
 ) sub
 where nullif(trim(editing_code),'') is not null

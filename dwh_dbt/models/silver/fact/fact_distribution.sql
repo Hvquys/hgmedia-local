@@ -10,10 +10,9 @@ select
     , usr.emp_names as employee
     , d."CreatedByUserId" as distributed_employee_id
 from {{ source('staging','distribution_media_history') }} d
-inner join {{ source('staging','resource_file_info') }} rfi
-    on d."ResourceFileInfoId" = rfi."Id"
-    and rfi."ResourceFileId" like 'HGFA%'   -- chỉ lấy tài nguyên có mã bắt đầu bằng HGFA
-
+left join {{ source('staging','resource_file_info') }} rfi on d."ResourceFileInfoId" = rfi."Id"
+ and rfi."ResourceFileId" like 'HGFA%'
+ 
 left join lateral (
     select string_agg(dd."Name", ', ') as dept_names
     from unnest(string_to_array(nullif(d."DepartmentData",''), ',')) g(id)

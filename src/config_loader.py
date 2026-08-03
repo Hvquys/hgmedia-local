@@ -22,6 +22,7 @@ def load_all_sources(config_dir: str = "config") -> list[dict]:
     all_sources += load_sources(f"{config_dir}/db_sources.yaml", "db_sources")
     all_sources += load_sources(f"{config_dir}/elastic_sources.yaml", "elastic_sources")
     all_sources += load_sources(f"{config_dir}/csv_sources.yaml", "csv_sources")
+    all_sources += load_sources(f"{config_dir}/api_sources.yaml", "api_sources")
     return all_sources
 
 

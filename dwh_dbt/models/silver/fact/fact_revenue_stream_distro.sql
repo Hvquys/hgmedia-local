@@ -3,13 +3,13 @@
 with base as (
     select
         retailer,
-        "iSRC" as isrc,
+        "isrc" as isrc,
         nullif(trim(artist), '') as artist,
         to_char(cast("reportingPeriod" as date), 'YYYY-MM') as revenue_month,
         cast("reportingPeriod" as date) as reporting_date,
-        replace(earnings, ',', '')::numeric as earning
+        cast("revenue" as numeric) as earning
     from {{ source('staging','sale') }}
-    where nullif(trim("iSRC"), '') is not null
+    where nullif(trim("isrc"), '') is not null
 ),
 
 revenue_agg as (

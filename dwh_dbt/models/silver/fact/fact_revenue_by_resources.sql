@@ -23,10 +23,6 @@ vid_res as (
         , count(*) over (
             partition by b.video_id, b.editing_code
         ) as n_res
-        , row_number() over (
-            partition by b.video_id, b.editing_code
-            order by f.position
-        ) as rn
     from {{ ref('bridge_bt_vid') }} b
     join {{ ref('fact_editing') }} f
         on b.editing_code = f.editing_code
@@ -41,16 +37,26 @@ weighted as (
         , vr.hg_stock_id
         , vr.position
         , vr.n_res
-        , vr.rn
         , case
-            when vr.n_res >= 5 then (array[5,2,1,1,1])[vr.rn]
-            when vr.n_res = 4 then (array[6,2,1,1])[vr.rn]
-            when vr.n_res = 3 then (array[6,3,1])[vr.rn]
-            when vr.n_res = 2 then (array[7,3])[vr.rn]
-            else 10
+            when vr.n_res = 1 then 10
+
+            when vr.n_res = 2 and vr.position in (1, 2) then 5
+
+            when vr.n_res = 3 and vr.position = 1 then 6
+            when vr.n_res = 3 and vr.position = 2 then 3
+            when vr.n_res = 3 and vr.position = 3 then 1
+
+            when vr.n_res = 4 and vr.position = 1 then 6
+            when vr.n_res = 4 and vr.position = 2 then 2
+            when vr.n_res = 4 and vr.position in (3, 4) then 1
+
+            when vr.n_res >= 5 and vr.position = 1 then 5
+            when vr.n_res >= 5 and vr.position = 2 then 2
+            when vr.n_res >= 5 and vr.position in (3, 4, 5) then 1
+
+            else 0
         end as w
     from vid_res vr
-    where vr.rn <= 5
 ),
 
 usd as (
