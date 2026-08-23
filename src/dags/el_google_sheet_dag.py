@@ -23,6 +23,8 @@ ALL_SOURCES = [
     "purchased_resource",
     "purchase_cost",
     "resource_before_odoo",
+    "resource_performance",
+    "distro_infomation"
 ]
 
 default_args = {
@@ -80,9 +82,18 @@ def el_google_sheet_pipeline():
         if extract_result is None:
             print(f"⏭ [{source_id}] skip - không có thay đổi")
             return f"[{source_id}] skip"
-        run_load(source_config, extract_result["batch_id"], extract_result["minio_path"])
-        print(f"✅ [{source_id}] loaded ({extract_result['row_count']} rows)")
-        return f"[{source_id}] loaded ({extract_result['row_count']} rows)"
+
+        if extract_result.get("streamed"):
+            row_count = extract_result["row_count"]
+        else:
+            row_count = run_load(
+                source_config,
+                extract_result["batch_id"],
+                extract_result["minio_path"],
+            )
+
+        print(f"✅ [{source_id}] loaded ({row_count} rows)")
+        return f"[{source_id}] loaded ({row_count} rows)"
 
     sources = get_sources()
     extract_and_load.expand(source_config=sources)

@@ -7,12 +7,12 @@ google_sheet_sources:
     source_type: "google_sheet"
     description: "Danh mục đối tác (Thông tin các kho nhạc BD)"
     spreadsheet_id: "14160tb_UrXT4LzkjYpPyQ_qp6f72jqc-UEWq5Ghu0sA"
-    worksheet_name: "Thông tin các kho nhạc BD"
+    worksheet_pattern: "Thông tin các kho nhạc BD"
     header_row: 2
     data_start_row: 3
     target_staging_table: "staging.partners"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
     # KHÔNG field_mapping -> staging full cột
 
   - source_id: "purchased_resource"
@@ -93,6 +93,29 @@ google_sheet_sources:
       - "Nghệ sĩ sản xuất"
       - "A&R"
       - "Dự án chốt"
+      - "Mã BH"
     target_staging_table: "staging.resource_performance"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
+
+  - source_id: "distro_infomation"
+    source_type: "google_sheet"
+    description: "[Tech - MLO] Danh sách nhạc cần mapping dự án"
+    spreadsheet_id: "17vVmy9Kv3m5Ah_k8JCs8PnxOnaAybB8R52kkLDuAVms"
+    worksheet_name: "List"
+    header_row: 1
+    data_start_row: 2
+    target_staging_table: "staging.distro_infomation"
+    load_mode: "truncate"
+    stream_to_staging: false
+
+  - source_id: "resource_infomation_add"
+    source_type: "google_sheet"
+    description: "File_Data_No_Info_T122025"
+    spreadsheet_id: "1TlfGJtF8BK4dVfpcBullUlFMZFMkU-U7Tl26PwEjQsM"
+    worksheet_name: "Bản sao của Stock-DB"
+    header_row: 1
+    data_start_row: 2
+    target_staging_table: "staging.resource_infomation_add"
+    load_mode: "truncate"
+    stream_to_staging: false

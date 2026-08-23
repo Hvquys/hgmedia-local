@@ -13,5 +13,5 @@ api_sources:
     api_date_to_param: "toDate"          # ← tên param API nhận
     parallel_by: "month"                 # ← chạy song song theo tháng
     target_staging_table: "staging.sale"
-    stream_to_staging: true
+    stream_to_staging: false
     load_mode: "truncate"

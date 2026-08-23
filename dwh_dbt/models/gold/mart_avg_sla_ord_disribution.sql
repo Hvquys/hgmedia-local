@@ -65,11 +65,11 @@ resource_count as (
 )
 
 select
-    repo.repository_name                              as repository
-    , dsp.sub_project_name                           as sub_project
-    , dp.project_name                                as project
-    , rc.number_resources                            as number_resources
-    , nullif(dsla.sla_ord_distribution, 0)           as sla_ord_distribution
+    cast(repo.repository_id as text)                as repository_id
+    , dsp.sub_project_name                          as sub_project
+    , dp.project_name                               as project
+    , rc.number_resources                           as number_resources
+    , nullif(dsla.sla_ord_distribution, 0)          as sla_ord_distribution
 from {{ ref('dim_repository') }} repo
 left join {{ ref('dim_sub_project') }} dsp
     on cast(repo.sub_project_id as text) = cast(dsp.sub_project_id as text)

@@ -57,10 +57,10 @@ CONNECTIONS = {
         "default_schema": "public",
     },
     "hg_stock": {
-        "type": "sqlserver",
+        "type": "postgresql",
         "host": _env("HGSTOCK_HOST", "PLACEHOLDER_HOST"),
-        "port": int(_env("HGSTOCK_PORT", "1433")),
-        "database": _env("HGSTOCK_DB", "stock"),
+        "port": int(_env("HGSTOCK_PORT", "5432")),
+        "database": _env("HGSTOCK_DB", "hgstock"),
         "user": _env("HGSTOCK_USER", "PLACEHOLDER_USER"),
         "password": _env("HGSTOCK_PASSWORD", "PLACEHOLDER_PASS"),
         "default_schema": "dbo",

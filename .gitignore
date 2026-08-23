@@ -8,7 +8,7 @@ __pycache__/
 # Virtual Environment
 venv/
 .venv/
-env/
+.env
 ENV/
 
 # ==========================
@@ -57,4 +57,21 @@ data/fact_view_stream.csv
 # ==========================
 *.log
 *.tmp
-*.bak
+*.bak.env
+*.pycoutputs/
+
+# Generated outputs
+outputs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local environment
+.env
+.env.*
+
+# dbt generated
+dwh_dbt/target/
+dwh_dbt/logs/
+dbt_packages/

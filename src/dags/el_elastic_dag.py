@@ -106,11 +106,17 @@ def el_elastic_pipeline():
             print(f"⏭ [{source_id}] skip")
             return f"[{source_id}] skip"
 
-        if not source_config.get("stream_to_staging"):
-            run_load(source_config, extract_result["batch_id"], extract_result["minio_path"])
+        if extract_result.get("streamed"):
+            row_count = extract_result["row_count"]
+        else:
+            row_count = run_load(
+                source_config,
+                extract_result["batch_id"],
+                extract_result["minio_path"],
+            )
 
-        print(f"✅ [{source_id}] loaded ({extract_result['row_count']} rows)")
-        return f"[{source_id}] loaded ({extract_result['row_count']} rows)"
+        print(f"✅ [{source_id}] loaded ({row_count} rows)")
+        return f"[{source_id}] loaded ({row_count} rows)"
 
     sources = get_sources()
     extract_and_load.expand(source_config=sources)
