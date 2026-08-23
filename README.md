@@ -1,4 +1,4 @@
-# DWH Pipeline — Google Sheet + Database → MinIO → Postgres (staging) → dbt (silver/gold)
+   # DWH Pipeline — Google Sheet + Database → MinIO → Postgres (staging) → dbt (silver/gold)
 
 Pipeline EL (Extract-Load) bằng Python cho 2 nhóm nguồn hiện tại (Google Sheet, Database),
 kết hợp dbt để transform. **Elasticsearch tạm bỏ qua**, sẽ bổ sung sau theo cùng pattern
@@ -161,3 +161,27 @@ dbt docs generate && dbt docs serve
 - Khi sẵn sàng thêm Elasticsearch: viết `ElasticsearchExtractor` (implement `BaseExtractor`),
   thêm `config/elasticsearch_sources.yaml`, đăng ký trong `extractors/factory.py`,
   tạo DAG `el_elasticsearch_dag.py` riêng (lịch dày hơn, ví dụ mỗi giờ).
+
+## Thiết lập Retention Policy Minio 7 ngày
+Bước 1 — Cài MinIO Client (`mc`)
+Mục đích: cài command-line client để quản lý MinIO và lifecycle policy từ WSL.
+
+```bash
+curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /tmp/mc
+chmod +x /tmp/mc
+sudo install /tmp/mc /usr/local/bin/mc
+
+mc --version
+
+Bước 2 — Lấy password MinIO runtime
+sudo grep MINIO_ROOT_PASSWORD /etc/systemd/system/minio.service
+Bước 3 — Tạo alias mc đến MinIO
+read -s MINIO_PASSWORD
+Nhập giá trị MINIO_ROOT_PASSWORD ở bước 2 rồi nhấn Enter. Password sẽ không hiển thị trên terminal.
+Bước 4: Kết nối mc đến MinIO hiện tại
+mc alias set dwh-minio http://localhost:9001 hgmedia "$MINIO_PASSWORD"
+Bước 5: Set retention 7 ngày cho toàn bộ raw-bronze
+mc ilm rule add dwh-minio/raw-bronze --expire-days 7
+Bước 6: Xác nhận thành công 
+mc ilm rule ls dwh-minio/raw-bronze
+Bạn cần thấy rule có DAYS TO EXPIRE là 7

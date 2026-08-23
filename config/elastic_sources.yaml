@@ -4,12 +4,11 @@ elastic_sources:
     connection: "elastic"
     es_index: "channel-video-info"
     date_field: "PublishedAt"
-    date_from: "2025-06-01"
     page_size: 5000
     sort_field: "YoutubeVideoId.keyword"
     target_staging_table: "staging.channel_video_info"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
     
   - source_id: "channel_video_metric"
     source_type: "elastic"
@@ -21,4 +20,4 @@ elastic_sources:
     sort_field: "CompositeId.keyword"
     target_staging_table: "staging.channel_video_metric"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false

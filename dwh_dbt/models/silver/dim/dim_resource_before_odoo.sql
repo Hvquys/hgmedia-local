@@ -1,5 +1,4 @@
 -- silver.dim_resource_before_odoo
--- silver.dim_resource_before_odoo
 select distinct on (trim("ISRC"))
     {{ dbt_utils.generate_surrogate_key(['"ISRC"']) }} as dim_resource_before_odoo_sk
     , nullif(trim("ISRC"), '') as isrc

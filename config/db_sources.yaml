@@ -12,7 +12,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.hr_employee"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "purchase_order"
     source_type: "sql"
@@ -23,7 +23,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.purchase_order"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "purchase_order_line"
     source_type: "sql"
@@ -34,7 +34,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.purchase_order_line"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
     
   - source_id: "res_partner"
     source_type: "sql"
@@ -45,7 +45,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.res_partner"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "sale_order_line"
     source_type: "sql"
@@ -56,7 +56,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.sale_order_line"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_acceptance_cert"
     source_type: "sql"
@@ -67,7 +67,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_acceptance_cert"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_music_plan"
     source_type: "sql"
@@ -78,7 +78,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_music_plan"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_music_plan_detail"
     source_type: "sql"
@@ -89,7 +89,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_music_plan_detail"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_music_plan_detail_price"
     source_type: "sql"
@@ -100,7 +100,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_music_plan_detail_price"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_music_song"
     source_type: "sql"
@@ -111,7 +111,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_music_song"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_product_genre"
     source_type: "sql"
@@ -122,7 +122,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_product_genre"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_product_subgenre"
     source_type: "sql"
@@ -133,7 +133,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_product_subgenre"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "x_project"
     source_type: "sql"
@@ -144,7 +144,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.x_project"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   # ===== hg_stock =====
   - source_id: "distribution_media_history"
@@ -152,7 +152,7 @@ db_sources:
     connection: "hg_stock"
     source_table: "distribution_media_history"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     watermark_column: null
     incremental: false
     load_mode: "truncate"
@@ -167,19 +167,56 @@ db_sources:
     incremental: false
     target_staging_table: "staging.groups"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "resource_file_info"
     source_type: "sql"
     connection: "hg_stock"
     source_table: "resource_file_info"
     schema: "dbo"
-    stream_to_staging: true
-    custom_query: "SELECT Id, ResourceFileId, Title, ISRC, CreatedDate, MediaType, UpdatedDate, CASE WHEN UpdatedDate IS NULL OR CreatedDate > UpdatedDate THEN CreatedDate ELSE UpdatedDate END AS _wm FROM dbo.resource_file_info"
-    watermark_column: "_wm"
+    stream_to_staging: false
+    custom_query: >-
+      SELECT
+          "Id",
+          "ResourceFileId",
+          "ResourceFolderId",
+          "Title",
+          "ISRC",
+          "CreatedDate",
+          "MediaType",
+          "UpdatedDate",
+          CASE
+              WHEN "UpdatedDate" IS NULL
+                OR "CreatedDate" > "UpdatedDate"
+              THEN "CreatedDate"
+              ELSE "UpdatedDate"
+          END AS _wm
+      FROM "dbo"."resource_file_info" 
     upsert_key: ["Id"]
     load_mode: "truncate"
     target_staging_table: "staging.resource_file_info"
+
+  - source_id: "resource_folders"
+    source_type: "sql"
+    connection: "hg_stock"
+    source_table: "resource_folders"
+    schema: "dbo"
+    stream_to_staging: false
+    watermark_column: null
+    incremental: false
+    load_mode: "truncate"
+    target_staging_table: "staging.resource_folders"
+
+  - source_id: "resource_file_action"
+    source_type: "sql"
+    connection: "hg_stock"
+    source_table: "resource_file_action"
+    schema: "dbo"
+    stream_to_staging: false
+    watermark_column: null
+    incremental: false
+    load_mode: "truncate"
+    target_staging_table: "staging.resource_file_action"
 
   - source_id: "roles"
     source_type: "sql"
@@ -190,7 +227,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.roles"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "user_departments"
     source_type: "sql"
@@ -201,7 +238,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.user_departments"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "users"
     source_type: "sql"
@@ -212,7 +249,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.users"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "tracking_video_publish_infos"
     source_type: "sql"
@@ -223,7 +260,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.tracking_video_publish_infos"
     load_mode: "truncate"
-    stream_to_staging: true;
+    stream_to_staging: false;
 
   # ===== channel_organization =====
   - source_id: "channel"
@@ -235,7 +272,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.channel"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "channeldepartment"
     source_type: "sql"
@@ -246,7 +283,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.channeldepartment"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "company"
     source_type: "sql"
@@ -257,7 +294,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.company"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "department"
     source_type: "sql"
@@ -268,7 +305,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.department"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "departmentlevel"
     source_type: "sql"
@@ -279,7 +316,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.departmentlevel"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "position"
     source_type: "sql"
@@ -290,7 +327,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.position"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "user"
     source_type: "sql"
@@ -301,7 +338,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.user"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "userdepartmentposition"
     source_type: "sql"
@@ -312,7 +349,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.userdepartmentposition"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   # ===== channel_project =====
   - source_id: "channel_project"
@@ -324,7 +361,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.channel_project"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "project"
     source_type: "sql"
@@ -335,7 +372,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.project"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   # ===== channel_network =====
   - source_id: "network"
@@ -347,7 +384,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.network"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   # ===== editing_management =====
   - source_id: "editings"
@@ -355,12 +392,12 @@ db_sources:
     connection: "editing_management"
     source_table: "Editings"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     watermark_column: null
     incremental: false
     load_mode: "truncate"
     target_staging_table: "staging.editings"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "user_editing"
     source_type: "sql"
@@ -371,26 +408,26 @@ db_sources:
     incremental: false
     target_staging_table: "staging.user_editing"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "resource"
     source_type: "sql"
     connection: "editing_management"
     source_table: "Resources"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     watermark_column: null
     incremental: false
     load_mode: "truncate"
     target_staging_table: "staging.resource"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "resource_editings"
     source_type: "sql"
     connection: "editing_management"
     source_table: "Resource_Editings"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     custom_query: "SELECT Id, EditingId, ResourcesId, StartTime, EndTime, CreatedDate, UpdatedDate, CASE WHEN UpdatedDate IS NULL OR CreatedDate > UpdatedDate THEN CreatedDate ELSE UpdatedDate END AS _wm FROM dbo.Resource_Editings WHERE IsDeleted = 0"
     watermark_column: "_wm"
     upsert_key: ["Id"]
@@ -403,19 +440,19 @@ db_sources:
     connection: "hg_stock"
     source_table: "resource_storage_history"
     schema: "dbo"
-    custom_query: "SELECT ResourceFileInfoId, ToStatus FROM dbo.resource_storage_history"
+    custom_query: 'SELECT "ResourceFileInfoId", "ToStatus" FROM "dbo"."resource_storage_history"'
     watermark_column: null
     incremental: false
     load_mode: "truncate"
     target_staging_table: "staging.resource_storage_history"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "review"
     source_type: "sql"
     connection: "record_survey"
     source_table: "Review"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     custom_query: "SELECT Id, CreatedByUserId, Rating, Concluding, Comment, CreatedDate, RecordingSoundVersionId FROM dbo.Review WHERE IsDeleted = 0"
     watermark_column: null
     incremental: false
@@ -427,7 +464,7 @@ db_sources:
     connection: "record_survey"
     source_table: "User"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     custom_query: "SELECT Id, FullName FROM dbo.[User] WHERE IsDeleted = 0"
     watermark_column: null
     incremental: false
@@ -439,7 +476,7 @@ db_sources:
     connection: "record_survey"
     source_table: "RecordingSound"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     watermark_column: null
     incremental: false
     load_mode: "truncate"
@@ -450,7 +487,7 @@ db_sources:
     connection: "record_survey"
     source_table: "RecordingSoundVersion"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     custom_query: "SELECT Id, RecordingSoundId, CreatedDate FROM dbo.RecordingSoundVersion WHERE IsDeleted = 0"
     watermark_column: null
     incremental: false
@@ -462,7 +499,7 @@ db_sources:
     connection: "record_survey"
     source_table: "UserCommentVersion"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     custom_query: "SELECT VersionNeedsCommentId, UserId, Rating FROM dbo.UserCommentVersion"
     watermark_column: null
     incremental: false
@@ -474,7 +511,7 @@ db_sources:
     connection: "record_survey"
     source_table: "VersionNeedsComment"
     schema: "dbo"
-    stream_to_staging: true
+    stream_to_staging: false
     custom_query: "SELECT Id, RecordingSoundVersionId FROM dbo.VersionNeedsComment"
     watermark_column: null
     incremental: false
@@ -491,7 +528,7 @@ db_sources:
     custom_query_columns: ["Id", "ChannelId", "CmsId", "IsDeleted", "IsOutNet", "ReceiveTimeUtc", "OutNetTimeUtc", "Type"]
     target_staging_table: "staging.channel_deal"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "cms"
     source_type: "sql"
@@ -503,7 +540,7 @@ db_sources:
     custom_query_columns: ["Id", "NetworkId", "IsDeleted"]
     target_staging_table: "staging.cms"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "res_company"
     source_type: "sql"
@@ -514,7 +551,18 @@ db_sources:
     incremental: false
     target_staging_table: "staging.res_company"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
+
+  - source_id: "res_users"
+    source_type: "sql"
+    connection: "odoo_pg"
+    source_table: "res_users"
+    schema: "public"
+    watermark_column: null
+    incremental: false
+    target_staging_table: "staging.res_users"
+    load_mode: "truncate"
+    stream_to_staging: false
 
   - source_id: "hr_department"
     source_type: "sql"
@@ -525,7 +573,18 @@ db_sources:
     incremental: false
     target_staging_table: "staging.hr_department"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
+
+  - source_id: "sale_order"
+    source_type: "sql"
+    connection: "odoo_pg"
+    source_table: "sale_order"
+    schema: "public"
+    watermark_column: null
+    incremental: false
+    target_staging_table: "staging.sale_order"
+    load_mode: "truncate"
+    stream_to_staging: false
 
   - source_id: "hr_job"
     source_type: "sql"
@@ -536,7 +595,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.hr_job"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
     
   - source_id: "channel_user"
     source_type: "sql"
@@ -547,7 +606,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.channel_user"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
 
   - source_id: "channel_company"
     source_type: "sql"
@@ -558,7 +617,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.channel_company"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
   
   - source_id: "resource_files"
     source_type: "sql"
@@ -569,4 +628,4 @@ db_sources:
     incremental: false
     target_staging_table: "staging.resource_files"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false

@@ -67,3 +67,9 @@ sources:
       - name: user_editing
       - name: repository_name_alias   # bảng alias thủ công, insert tay, không qua EL
       - name: resource_performance  # raw: file excel tracking video publish
+      - name: res_users
+      - name: sale_order 
+      - name: resource_folders
+      - name: resource_file_action
+      - name: distro_infomation
+      - name: resource_infomation_add

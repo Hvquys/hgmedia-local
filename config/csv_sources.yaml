@@ -12,7 +12,7 @@ csv_sources:
     sep: ","
     target_staging_table: "staging.stream_distro"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
     chunksize: 5000
   - source_id: "usd_rate"
     source_type: "fx"
@@ -20,5 +20,6 @@ csv_sources:
     currency: "vnd"
     target_staging_table: "staging.usd_rate"
     load_mode: "truncate"
-    stream_to_staging: true
+    stream_to_staging: false
     batch_days: 30
+

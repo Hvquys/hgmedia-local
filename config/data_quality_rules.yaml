@@ -1,0 +1,35 @@
+version: 1
+
+data_quality_rules:
+  partners:
+    enabled: true
+    target_table: staging.partners
+    fail_pipeline_on:
+      - critical
+
+    rules:
+      - id: partners_row_count
+        expectation: expect_table_row_count_to_be_between
+        kwargs:
+          min_value: 1
+        severity: critical
+
+      - id: partners_stt_not_null
+        expectation: expect_column_values_to_not_be_null
+        kwargs:
+          column: STT
+        severity: critical
+
+      - id: partners_stt_unique
+        expectation: expect_column_values_to_be_unique
+        kwargs:
+          column: STT
+        severity: warning
+
+      - id: partners_project_allowed
+        expectation: expect_column_values_to_be_in_set
+        kwargs:
+          column: Dự án
+          value_set: ["Deep House", "Relax", "Lofi", "Phúc âm"]
+          mostly: 0.95
+        severity: warning
