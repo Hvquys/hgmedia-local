@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: mart_phase6_daily_sales
+    description: "Gold data mart tổng hợp giao dịch bán hàng theo ngày"
+
+    columns:
+      - name: sale_date
+        description: "Ngày tổng hợp, đồng thời là grain của data mart"
+        data_tests:
+          - not_null
+          - unique
+
+      - name: sale_count
+        data_tests:
+          - not_null
+
+      - name: total_amount
+        data_tests:
+          - not_null

@@ -50,8 +50,8 @@ sources:
       - name: usd_rate
       - name: review
       - name: review_user
-      - name: user_comment_version 
-      - name: recording_sound_version 
+      - name: user_comment_version
+      - name: recording_sound_version
       - name: recording_sound
       - name: version_needs_comment
       - name: channel_deal   # raw: Channel_Deal (channel.service.relationship)
@@ -68,8 +68,10 @@ sources:
       - name: repository_name_alias   # bảng alias thủ công, insert tay, không qua EL
       - name: resource_performance  # raw: file excel tracking video publish
       - name: res_users
-      - name: sale_order 
+      - name: sale_order
       - name: resource_folders
       - name: resource_file_action
       - name: distro_infomation
       - name: resource_infomation_add
+      - name: phase6_sales
+        description: "Dữ liệu bán hàng mẫu được load từ CSV qua MinIO Bronze"

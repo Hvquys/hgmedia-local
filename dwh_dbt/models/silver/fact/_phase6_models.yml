@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: fact_phase6_sales
+    description: "Silver fact mẫu được chuẩn hóa từ staging.phase6_sales"
+
+    columns:
+      - name: sale_id
+        description: "Khóa nghiệp vụ của giao dịch"
+        data_tests:
+          - not_null
+          - unique
+
+      - name: customer_name
+        data_tests:
+          - not_null
+
+      - name: amount
+        data_tests:
+          - not_null
+
+      - name: sale_date
+        data_tests:
+          - not_null
+
+      - name: _batch_id
+        data_tests:
+          - not_null
