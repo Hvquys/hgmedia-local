@@ -16,8 +16,12 @@ models:
           - not_null
 
       - name: amount
+        description: "Giá trị giao dịch đã được chuẩn hóa thành numeric(18,2)"
         data_tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> 0"
 
       - name: sale_date
         data_tests:

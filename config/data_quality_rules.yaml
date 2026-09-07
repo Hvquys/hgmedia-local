@@ -30,6 +30,75 @@ data_quality_rules:
         expectation: expect_column_values_to_be_in_set
         kwargs:
           column: Dự án
-          value_set: ["Deep House", "Relax", "Lofi", "Phúc âm"]
+          value_set:
+            - Deep House
+            - Relax
+            - Lofi
+            - Phúc âm
           mostly: 0.95
         severity: warning
+
+  phase6_sales:
+    enabled: true
+    target_table: staging.phase6_sales
+    fail_pipeline_on:
+      - critical
+
+    rules:
+      - id: phase6_sales_row_count
+        expectation: expect_table_row_count_to_equal
+        kwargs:
+          value: 5
+        severity: critical
+
+      - id: phase6_sales_sale_id_not_null
+        expectation: expect_column_values_to_not_be_null
+        kwargs:
+          column: sale_id
+        severity: critical
+
+      - id: phase6_sales_sale_id_unique
+        expectation: expect_column_values_to_be_unique
+        kwargs:
+          column: sale_id
+        severity: critical
+
+      - id: phase6_sales_customer_not_null
+        expectation: expect_column_values_to_not_be_null
+        kwargs:
+          column: customer_name
+        severity: critical
+
+      - id: phase6_sales_amount_not_null
+        expectation: expect_column_values_to_not_be_null
+        kwargs:
+          column: amount
+        severity: critical
+
+      - id: phase6_sales_amount_format
+        expectation: expect_column_values_to_match_regex
+        kwargs:
+          column: amount
+          regex: '^[0-9]+(\.[0-9]+)?$'
+        severity: critical
+
+      - id: phase6_sales_date_not_null
+        expectation: expect_column_values_to_not_be_null
+        kwargs:
+          column: sale_date
+        severity: critical
+
+      - id: phase6_sales_date_format
+        expectation: expect_column_values_to_match_regex
+        kwargs:
+          column: sale_date
+          regex: '^\d{4}-\d{2}-\d{2}$'
+        severity: critical
+
+      - id: phase6_sales_source_id
+        expectation: expect_column_values_to_be_in_set
+        kwargs:
+          column: _source_id
+          value_set:
+            - phase6_sales
+        severity: critical

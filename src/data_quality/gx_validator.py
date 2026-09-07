@@ -9,7 +9,39 @@ from sqlalchemy import create_engine
 from src.connections import get_connection, get_sqlalchemy_uri
 
 
-TABLE_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$")
+TABLE_NAME_PATTERN = re.compile(
+    r"^[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*$"
+)
+
+
+def _resolve_expectation_class(expectation_name: str):
+    direct_class = getattr(
+        gx.expectations,
+        expectation_name,
+        None,
+    )
+
+    if direct_class is not None:
+        return direct_class
+
+    class_name = "".join(
+        word.capitalize()
+        for word in expectation_name.split("_")
+    )
+
+    expectation_class = getattr(
+        gx.expectations,
+        class_name,
+        None,
+    )
+
+    if expectation_class is None:
+        raise AttributeError(
+            "Không tìm thấy Great Expectations class cho "
+            f"'{expectation_name}' hoặc '{class_name}'"
+        )
+
+    return expectation_class
 
 
 def _to_dict(value: Any) -> dict:
@@ -30,19 +62,32 @@ def _to_text(value: Any) -> str | None:
         return None
 
     if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False, default=str)
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            default=str,
+        )
 
     return str(value)
 
 
-def load_staging_dataframe(target_table: str) -> pd.DataFrame:
-    if not TABLE_NAME_PATTERN.match(target_table):
-        raise ValueError(f"Tên bảng không hợp lệ: {target_table}")
+def load_staging_dataframe(
+    target_table: str,
+) -> pd.DataFrame:
+    if not TABLE_NAME_PATTERN.fullmatch(target_table):
+        raise ValueError(
+            f"Tên bảng không hợp lệ: {target_table}"
+        )
 
     conn_cfg = get_connection("dwh_postgres")
-    engine = create_engine(get_sqlalchemy_uri(conn_cfg))
+    engine = create_engine(
+        get_sqlalchemy_uri(conn_cfg)
+    )
 
-    return pd.read_sql(f"SELECT * FROM {target_table}", engine)
+    return pd.read_sql(
+        f"SELECT * FROM {target_table}",
+        engine,
+    )
 
 
 def validate_dataframe(
@@ -55,14 +100,21 @@ def validate_dataframe(
     datasource = context.data_sources.add_pandas(
         name=f"dq_pandas_{source_id}"
     )
+
     asset = datasource.add_dataframe_asset(
         name=f"dq_asset_{source_id}"
     )
-    batch_definition = asset.add_batch_definition_whole_dataframe(
-        name=f"dq_batch_{source_id}"
+
+    batch_definition = (
+        asset.add_batch_definition_whole_dataframe(
+            name=f"dq_batch_{source_id}"
+        )
     )
+
     batch = batch_definition.get_batch(
-        batch_parameters={"dataframe": dataframe}
+        batch_parameters={
+            "dataframe": dataframe,
+        }
     )
 
     normalized_results = []
@@ -73,18 +125,38 @@ def validate_dataframe(
 
         rule_id = rule["id"]
         expectation_name = rule["expectation"]
-        severity = rule.get("severity", "warning").lower()
+        severity = rule.get(
+            "severity",
+            "warning",
+        ).lower()
+
         kwargs = rule.get("kwargs", {})
         column_name = kwargs.get("column")
 
         try:
-            expectation_class = getattr(gx.expectations, expectation_name)
-            expectation = expectation_class(**kwargs)
-            gx_result = batch.validate(expectation)
-            raw_result = _to_dict(gx_result)
+            expectation_class = (
+                _resolve_expectation_class(
+                    expectation_name
+                )
+            )
 
-            result_details = raw_result.get("result", {})
-            success = bool(raw_result.get("success", False))
+            expectation = expectation_class(
+                **kwargs
+            )
+
+            gx_result = batch.validate(
+                expectation
+            )
+
+            raw_result = _to_dict(gx_result)
+            result_details = raw_result.get(
+                "result",
+                {},
+            )
+
+            success = bool(
+                raw_result.get("success", False)
+            )
 
             normalized_results.append({
                 "rule_id": rule_id,
@@ -93,11 +165,19 @@ def validate_dataframe(
                 "severity": severity,
                 "success": success,
                 "observed_value": _to_text(
-                    result_details.get("observed_value")
+                    result_details.get(
+                        "observed_value"
+                    )
                 ),
-                "unexpected_count": result_details.get("unexpected_count"),
-                "unexpected_percent": result_details.get(
-                    "unexpected_percent"
+                "unexpected_count": (
+                    result_details.get(
+                        "unexpected_count"
+                    )
+                ),
+                "unexpected_percent": (
+                    result_details.get(
+                        "unexpected_percent"
+                    )
                 ),
                 "raw_result": raw_result,
             })
