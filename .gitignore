@@ -75,3 +75,6 @@ __pycache__/
 dwh_dbt/target/
 dwh_dbt/logs/
 dbt_packages/
+
+# Cho phép commit file cấu hình mẫu
+!.env.example
