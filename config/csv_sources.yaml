@@ -1,4 +1,15 @@
 csv_sources:
+
+  - source_id: "phase6_sales"
+    source_type: "csv"
+    description: "Dữ liệu bán hàng mẫu cho lần chạy local đầu tiên"
+    file_path: "data/samples/phase6_sales.csv"
+    sep: ","
+    target_staging_table: "staging.phase6_sales"
+    load_mode: "truncate"
+    stream_to_staging: false
+    chunksize: 5000
+
   # - source_id: "sale"
   #   source_type: "csv"
   #   file_path: "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline/data/Untitled Discover session.csv"
