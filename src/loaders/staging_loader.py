@@ -1,102 +1,248 @@
-"""
-loaders/staging_loader.py
-Load DataFrame thô (đã download từ MinIO) vào Postgres schema "staging".
-KHÔNG áp business rule (join, tính cột phái sinh) — phần đó để dbt models xử lý.
-Chỉ làm 3 việc: ép kiểu cơ bản, thêm cột metadata, ghi vào đúng bảng staging.<source_id>.
-"""
+"""Load Bronze dataframes into PostgreSQL staging tables."""
+
+import hashlib
+import json
+import logging
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from src.connections import get_connection, get_sqlalchemy_uri
+from src.sql_utils import quote_dataframe_column, split_qualified_table
+
+
+logger = logging.getLogger(__name__)
 
 
 class StagingLoader:
-
     def __init__(self):
-        conn_cfg = get_connection("dwh_postgres")
-        self.engine = create_engine(get_sqlalchemy_uri(conn_cfg))
+        connection = get_connection("dwh_postgres")
+        self.engine = create_engine(get_sqlalchemy_uri(connection))
 
     def load(
-        self, df: pd.DataFrame, staging_table: str, batch_id: str,
-        load_mode: str = "append", upsert_key: list = None,
+        self,
+        df: pd.DataFrame,
+        staging_table: str,
+        batch_id: str,
+        load_mode: str = "append",
+        upsert_key: list | None = None,
     ) -> int:
-        """
-        load_mode:
-          - "truncate": xóa sạch bảng staging rồi insert (dùng cho Dim nhỏ, full reload mỗi lần)
-          - "append": chỉ thêm dòng mới (dùng cho Fact incremental theo watermark)
-          - "upsert": cần upsert_key, dùng khi muốn update record cũ + insert record mới
-        staging_table dạng "staging.<source_id>" (vd staging.dim_partners)
-        """
-        df = df.copy()
-        # làm sạch tên cột: bỏ rỗng/xuống dòng, khử trùng tên
-        new_cols, seen = [], {}
-        for i, c in enumerate(df.columns):
-            name = str(c).replace("\n", " ").strip() or f"col_{i}"
-            if name in seen:
-                seen[name] += 1; name = f"{name}_{seen[name]}"
-            else:
-                seen[name] = 0
-            new_cols.append(name)
-        df.columns = new_cols
-        import json
-        # ép cột chứa dict/list (jsonb Odoo) về chuỗi JSON để psycopg2 insert được
-        for col in df.columns:
-            if df[col].map(lambda v: isinstance(v, (dict, list))).any():
-                df[col] = df[col].map(
-                    lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v
-                )
-        df["_batch_id"] = batch_id
-        df["_loaded_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
+        if load_mode not in {"truncate", "append", "upsert"}:
+            raise ValueError(f"load_mode không hợp lệ: {load_mode!r}")
 
-        schema, table = staging_table.split(".")
+        dataframe = self._prepare_dataframe(df, batch_id)
+        schema, table = split_qualified_table(staging_table)
+        self._ensure_schema(schema)
 
         if load_mode == "truncate":
-            with self.engine.begin() as conn:
-                conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-            df.to_sql(table, self.engine, schema=schema, if_exists="replace", index=False, chunksize=5000)
-
+            self._replace_atomically(dataframe, schema, table)
         elif load_mode == "upsert":
             if not upsert_key:
                 raise ValueError("upsert_key bắt buộc khi load_mode='upsert'")
-            self._upsert(df, schema, table, upsert_key)
+            self._upsert(dataframe, schema, table, upsert_key)
+        else:
+            dataframe.to_sql(
+                table,
+                self.engine,
+                schema=schema,
+                if_exists="append",
+                index=False,
+                chunksize=5_000,
+            )
+        return len(dataframe)
 
-        else:  # append (mặc định, dùng cho incremental)
-            df.to_sql(table, self.engine, schema=schema, if_exists="append", index=False, chunksize=5000)
+    @staticmethod
+    def _prepare_dataframe(df: pd.DataFrame, batch_id: str) -> pd.DataFrame:
+        dataframe = df.copy()
+        new_columns = []
+        seen = {}
+        for index, column in enumerate(dataframe.columns):
+            name = str(column).replace("\n", " ").strip() or f"col_{index}"
+            if name in seen:
+                seen[name] += 1
+                name = f"{name}_{seen[name]}"
+            else:
+                seen[name] = 0
+            new_columns.append(name)
+        dataframe.columns = new_columns
 
-        return len(df)
+        for column in dataframe.columns:
+            if dataframe[column].map(
+                lambda value: isinstance(value, (dict, list))
+            ).any():
+                dataframe[column] = dataframe[column].map(
+                    lambda value: json.dumps(value, ensure_ascii=False)
+                    if isinstance(value, (dict, list))
+                    else value
+                )
 
-    def _upsert(self, df: pd.DataFrame, schema: str, table: str, upsert_key: list):
-        """Upsert đơn giản: load vào bảng tạm rồi merge bằng SQL (ON CONFLICT)."""
-        temp_table = f"_tmp_{table}"
-        df.to_sql(temp_table, self.engine, schema=schema, if_exists="replace", index=False)
+        dataframe["_batch_id"] = batch_id
+        dataframe["_loaded_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
+        return dataframe
 
-        # tạo bảng đích nếu chưa có + unique index cho ON CONFLICT
-        df.iloc[0:0].to_sql(table, self.engine, schema=schema, if_exists="append", index=False)
-        key_clause = ", ".join(upsert_key)
-        idx_name = f"uq_{table}_{'_'.join(upsert_key)}"
-        with self.engine.begin() as conn:
-            conn.exec_driver_sql(
-                f'CREATE UNIQUE INDEX IF NOT EXISTS "{idx_name}" '
-                f"ON {schema}.{table} ({key_clause})"
+    def _ensure_schema(self, schema: str) -> None:
+        quoted_schema = quote_dataframe_column(schema)
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql(
+                f"CREATE SCHEMA IF NOT EXISTS {quoted_schema}"
             )
 
-        cols = list(df.columns)
-        non_key_cols = [c for c in cols if c not in upsert_key]
-        update_clause = ", ".join([f"{c} = EXCLUDED.{c}" for c in non_key_cols])
-        col_list = ", ".join(cols)
-        merge_sql = f"""
-            INSERT INTO {schema}.{table} ({col_list})
-            SELECT {col_list} FROM {schema}.{temp_table}
-            ON CONFLICT ({key_clause}) DO UPDATE SET {update_clause}
-        """
-        with self.engine.begin() as conn:
-            conn.exec_driver_sql(merge_sql)
-            conn.exec_driver_sql(f"DROP TABLE {schema}.{temp_table}")
-            
+    def _replace_atomically(
+        self,
+        dataframe: pd.DataFrame,
+        schema: str,
+        table: str,
+    ) -> None:
+        temp_table = self._temporary_table_name(table)
+        quoted_schema = quote_dataframe_column(schema)
+        quoted_table = quote_dataframe_column(table)
+        quoted_temp = quote_dataframe_column(temp_table)
+        columns = ", ".join(
+            quote_dataframe_column(column) for column in dataframe.columns
+        )
+
+        dataframe.to_sql(
+            temp_table,
+            self.engine,
+            schema=schema,
+            if_exists="fail",
+            index=False,
+            chunksize=5_000,
+        )
+        try:
+            with self.engine.begin() as connection:
+                target_exists = connection.execute(
+                    text("SELECT to_regclass(:qualified_name) IS NOT NULL"),
+                    {"qualified_name": f"{schema}.{table}"},
+                ).scalar_one()
+                if not target_exists:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE {quoted_schema}.{quoted_temp} "
+                        f"RENAME TO {quoted_table}"
+                    )
+                    return
+
+                connection.exec_driver_sql(
+                    f"TRUNCATE TABLE {quoted_schema}.{quoted_table}"
+                )
+                if columns:
+                    connection.exec_driver_sql(
+                        f"INSERT INTO {quoted_schema}.{quoted_table} ({columns}) "
+                        f"SELECT {columns} FROM {quoted_schema}.{quoted_temp}"
+                    )
+                connection.exec_driver_sql(
+                    f"DROP TABLE {quoted_schema}.{quoted_temp}"
+                )
+        finally:
+            self._cleanup_table(schema, temp_table)
+
+    def _upsert(
+        self,
+        dataframe: pd.DataFrame,
+        schema: str,
+        table: str,
+        upsert_key: list,
+    ) -> None:
+        missing_keys = [key for key in upsert_key if key not in dataframe.columns]
+        if missing_keys:
+            raise ValueError(
+                f"upsert_key không tồn tại trong dữ liệu: {', '.join(missing_keys)}"
+            )
+
+        temp_table = self._temporary_table_name(table)
+        dataframe.to_sql(
+            temp_table,
+            self.engine,
+            schema=schema,
+            if_exists="fail",
+            index=False,
+        )
+        quoted_schema = quote_dataframe_column(schema)
+        quoted_table = quote_dataframe_column(table)
+        quoted_temp = quote_dataframe_column(temp_table)
+        quoted_keys = [quote_dataframe_column(key) for key in upsert_key]
+        quoted_columns = [
+            quote_dataframe_column(column) for column in dataframe.columns
+        ]
+        non_key_columns = [
+            column for column in dataframe.columns if column not in upsert_key
+        ]
+        raw_index_name = f"uq_{table}_{'_'.join(upsert_key)}"
+        if len(raw_index_name.encode("utf-8")) > 63:
+            index_hash = hashlib.sha256(
+                f"{schema}.{table}:{','.join(upsert_key)}".encode("utf-8")
+            ).hexdigest()[:12]
+            raw_index_name = f"uq_{table[:40]}_{index_hash}"
+        index_name = quote_dataframe_column(raw_index_name)
+
+        try:
+            dataframe.iloc[0:0].to_sql(
+                table,
+                self.engine,
+                schema=schema,
+                if_exists="append",
+                index=False,
+            )
+            with self.engine.begin() as connection:
+                connection.exec_driver_sql(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                    f"ON {quoted_schema}.{quoted_table} "
+                    f"({', '.join(quoted_keys)})"
+                )
+                if non_key_columns:
+                    update_clause = ", ".join(
+                        f"{quote_dataframe_column(column)} = "
+                        f"EXCLUDED.{quote_dataframe_column(column)}"
+                        for column in non_key_columns
+                    )
+                    conflict_action = f"DO UPDATE SET {update_clause}"
+                else:
+                    conflict_action = "DO NOTHING"
+                connection.exec_driver_sql(
+                    f"INSERT INTO {quoted_schema}.{quoted_table} "
+                    f"({', '.join(quoted_columns)}) "
+                    f"SELECT {', '.join(quoted_columns)} "
+                    f"FROM {quoted_schema}.{quoted_temp} "
+                    f"ON CONFLICT ({', '.join(quoted_keys)}) {conflict_action}"
+                )
+                connection.exec_driver_sql(
+                    f"DROP TABLE {quoted_schema}.{quoted_temp}"
+                )
+        finally:
+            self._cleanup_table(schema, temp_table)
+
+    def _cleanup_table(self, schema: str, table: str) -> None:
+        try:
+            self._drop_table_if_exists(schema, table)
+        except Exception:
+            logger.warning(
+                "Không thể dọn bảng tạm %s.%s",
+                schema,
+                table,
+                exc_info=True,
+            )
+
+    def _drop_table_if_exists(self, schema: str, table: str) -> None:
+        quoted_schema = quote_dataframe_column(schema)
+        quoted_table = quote_dataframe_column(table)
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql(
+                f"DROP TABLE IF EXISTS {quoted_schema}.{quoted_table}"
+            )
+
+    @staticmethod
+    def _temporary_table_name(table: str) -> str:
+        return f"_load_{table[:35]}_{uuid4().hex[:12]}"
+
     def ensure_table_exists(self, df: pd.DataFrame, staging_table: str):
-        """Tạo bảng staging nếu chưa tồn tại, dựa theo dtype của DataFrame (dùng pandas to_sql tự suy kiểu)."""
-        schema, table = staging_table.split(".")
-        empty_df = df.iloc[0:0]
-        empty_df.to_sql(table, self.engine, schema=schema, if_exists="append", index=False)
+        schema, table = split_qualified_table(staging_table)
+        self._ensure_schema(schema)
+        df.iloc[0:0].to_sql(
+            table,
+            self.engine,
+            schema=schema,
+            if_exists="append",
+            index=False,
+        )

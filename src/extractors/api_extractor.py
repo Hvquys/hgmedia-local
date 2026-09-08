@@ -1,40 +1,53 @@
-import logging, requests, pandas as pd, gc
-from typing import Optional
+"""Extractor cho API phân trang, hỗ trợ chia khoảng theo tháng."""
+
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+
+import pandas as pd
+import requests
 from dateutil.relativedelta import relativedelta
+
 from src.extractors.base import BaseExtractor, ExtractResult
 
-log = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
 
 
 class ApiExtractor(BaseExtractor):
-
-    def __init__(self, source_config: dict):
-        super().__init__(source_config)
+    """Đọc API về DataFrame để task chung lưu Bronze trước khi load Staging."""
 
     def extract(self, watermark_filter=None) -> ExtractResult:
-        cfg = self.source_config
+        if self.source_config.get("stream_to_staging"):
+            raise ValueError(
+                "ApiExtractor không hỗ trợ stream_to_staging. "
+                "Dữ liệu phải đi qua Bronze để có thể retry và đối soát."
+            )
 
-        # Nếu có parallel_by: month → chạy song song
-        if cfg.get("parallel_by") == "month":
+        if self.source_config.get("parallel_by") == "month":
             return self._extract_parallel_monthly()
 
-        return self._extract_single(cfg.get("params", {}).copy())
+        dataframe, page_count = self._fetch_pages(
+            self.source_config.get("params", {}).copy()
+        )
+        return self._build_result(
+            dataframe,
+            {"parallel": False, "pages": page_count},
+        )
 
-    def _get_month_ranges(self):
-        """Tạo danh sách (date_from, date_to) theo tháng từ date_from đến nay."""
-        cfg = self.source_config
-        date_from_str = cfg.get("date_from", "2025-06-01")
-        start = datetime.strptime(date_from_str, "%Y-%m-%d").replace(day=1)
+    def _get_month_ranges(self) -> list[tuple[str, str]]:
+        date_from = self.source_config.get("date_from", "2025-06-01")
+        start = datetime.strptime(date_from, "%Y-%m-%d").replace(day=1)
         end = datetime.now().replace(day=1) + relativedelta(months=1)
 
         ranges = []
-        cur = start
-        while cur < end:
-            nxt = cur + relativedelta(months=1)
-            ranges.append((cur.strftime("%Y-%m-%d"), nxt.strftime("%Y-%m-%d")))
-            cur = nxt
+        current = start
+        while current < end:
+            following = current + relativedelta(months=1)
+            ranges.append(
+                (current.strftime("%Y-%m-%d"), following.strftime("%Y-%m-%d"))
+            )
+            current = following
         return ranges
 
     def _extract_parallel_monthly(self) -> ExtractResult:
@@ -42,140 +55,172 @@ class ApiExtractor(BaseExtractor):
         ranges = self._get_month_ranges()
         from_param = cfg.get("api_date_from_param", "fromDate")
         to_param = cfg.get("api_date_to_param", "toDate")
-        max_workers = cfg.get("parallel_workers", 3)
+        max_workers = max(1, int(cfg.get("parallel_workers", 3)))
+        frames_by_month = {}
+        pages_by_month = {}
+        failures = []
 
-        # Tạo engine 1 lần duy nhất, pool_size đủ cho tất cả luồng
-        from sqlalchemy import create_engine, text
-        from src.connections import get_connection, get_sqlalchemy_uri
-        dwh = create_engine(
-            get_sqlalchemy_uri(get_connection("dwh_postgres")),
-            pool_size=max_workers + 5,
-            max_overflow=10,
-            pool_timeout=60,
-        )
-
-        # Truncate nếu load_mode = replace
-        if cfg.get("load_mode") == "replace":
-            schema, table = cfg["target_staging_table"].split(".")
-            with dwh.connect() as conn:
-                conn.execute(text(f"TRUNCATE TABLE {schema}.{table}"))
-                conn.commit()
-            log.info(f"[{cfg['source_id']}] TRUNCATE {schema}.{table} xong")
-
-        log.info(f"[{cfg['source_id']}] Parallel {max_workers} luồng × {len(ranges)} tháng")
-        total_rows = 0
-
-        def fetch_month(date_from, date_to):
+        def fetch_month(date_from: str, date_to: str):
             params = cfg.get("params", {}).copy()
             params[from_param] = date_from
             params[to_param] = date_to
-            return self._extract_single(params, month_label=f"{date_from[:7]}", dwh=dwh)
+            dataframe, pages = self._fetch_pages(
+                params,
+                month_label=date_from[:7],
+            )
+            return date_from, dataframe, pages
 
+        logger.info(
+            "[%s] Đọc song song %s tháng với %s worker",
+            cfg["source_id"],
+            len(ranges),
+            max_workers,
+        )
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(fetch_month, date_from, date_to): (date_from, date_to)
+                executor.submit(fetch_month, date_from, date_to): date_from
                 for date_from, date_to in ranges
             }
             for future in as_completed(futures):
-                date_from, date_to = futures[future]
+                month = futures[future][:7]
                 try:
-                    row_count = future.result()
-                    total_rows += row_count
-                    log.info(f"[{cfg['source_id']}] ✓ {date_from[:7]}: {row_count} dòng (tổng {total_rows})")
-                except Exception as e:
-                    log.error(f"[{cfg['source_id']}] ✗ {date_from[:7]}: {e}")
+                    date_from, dataframe, pages = future.result()
+                    frames_by_month[date_from] = dataframe
+                    pages_by_month[date_from] = pages
+                    logger.info(
+                        "[%s] %s hoàn tất: %s dòng",
+                        cfg["source_id"],
+                        month,
+                        len(dataframe),
+                    )
+                except Exception as error:
+                    failures.append((month, error))
+                    logger.exception(
+                        "[%s] %s thất bại",
+                        cfg["source_id"],
+                        month,
+                    )
 
-        dwh.dispose()  # đóng pool sau khi xong
-        return ExtractResult(
-            dataframe=pd.DataFrame(), row_count=total_rows,
-            checksum=None, watermark_value=None,
-            source_meta={"parallel": True, "months": len(ranges), "streamed": True}
+        if failures:
+            details = "; ".join(
+                f"{month}: {type(error).__name__}: {error}"
+                for month, error in sorted(failures)
+            )
+            raise RuntimeError(
+                f"[{cfg['source_id']}] API extraction thất bại; "
+                f"không tạo batch một phần. {details}"
+            )
+
+        ordered_frames = [
+            frames_by_month[date_from]
+            for date_from, _ in ranges
+            if not frames_by_month[date_from].empty
+        ]
+        dataframe = (
+            pd.concat(ordered_frames, ignore_index=True)
+            if ordered_frames
+            else pd.DataFrame()
+        )
+        return self._build_result(
+            dataframe,
+            {
+                "parallel": True,
+                "months": len(ranges),
+                "pages": sum(pages_by_month.values()),
+            },
         )
 
-
-    def _extract_single(self, params: dict, month_label: str = "", dwh=None) -> int:
+    def _fetch_pages(
+        self,
+        params: dict,
+        month_label: str = "",
+    ) -> tuple[pd.DataFrame, int]:
         cfg = self.source_config
-        url = cfg["api_url"]
-        verify_ssl = cfg.get("verify_ssl", True)
-        headers = cfg.get("headers", {})
         data_key = cfg.get("data_key")
         scroll_key = cfg.get("scroll_key")
         has_more_key = cfg.get("has_more_key")
-        params = params.copy()
+        max_pages = max(1, int(cfg.get("max_pages", 10_000)))
+        request_params = params.copy()
+        rows = []
+        seen_scroll_values = set()
 
-        page = 0
-        month_rows = 0
+        for page_number in range(1, max_pages + 1):
+            response = requests.get(
+                cfg["api_url"],
+                params=request_params,
+                headers=cfg.get("headers", {}),
+                verify=cfg.get("verify_ssl", True),
+                timeout=cfg.get("timeout_seconds", 120),
+            )
+            response.raise_for_status()
+            payload = response.json()
 
-        while True:
-            r = requests.get(url, params=params, headers=headers,
-                            verify=verify_ssl, timeout=120)
-            r.raise_for_status()
-            resp = r.json()
-
-            if isinstance(resp, dict):
-                data = resp[data_key] if data_key else list(resp.values())[0]
-            else:
-                data = resp
-
-            if not data:
-                break
-
-            page += 1
-            month_rows += len(data)
-            log.info(f"[{cfg['source_id']}] {month_label} page {page}: +{len(data)} (tháng: {month_rows})")
-
-            if cfg.get("stream_to_staging"):
-                df = pd.json_normalize(data)
-                df["_source_id"] = cfg["source_id"]
-                self._stream_to_db(df, cfg, dwh=dwh)  # truyền dwh vào
-                del df, data, r
-                gc.collect()
-
-            # Kiểm tra còn trang không
-            has_more = False
-            if has_more_key and isinstance(resp, dict):
-                has_more = bool(resp.get(has_more_key, False))
-            if not has_more:
-                break
-
-            if scroll_key and isinstance(resp, dict):
-                scroll_val = resp.get(scroll_key)
-                if scroll_val:
-                    params[scroll_key] = scroll_val
+            if isinstance(payload, dict):
+                if data_key:
+                    if data_key not in payload:
+                        raise KeyError(f"API response thiếu data_key '{data_key}'")
+                    page_rows = payload[data_key]
                 else:
-                    break
+                    raise ValueError(
+                        "API response là object nhưng config chưa khai báo data_key"
+                    )
+            elif isinstance(payload, list):
+                page_rows = payload
             else:
-                break
+                raise TypeError(
+                    f"API response phải là object hoặc list, nhận {type(payload).__name__}"
+                )
 
-        return month_rows
+            if page_rows is None:
+                page_rows = []
+            if not isinstance(page_rows, list):
+                raise TypeError(
+                    f"API field '{data_key}' phải là list, nhận "
+                    f"{type(page_rows).__name__}"
+                )
+            rows.extend(page_rows)
+            logger.info(
+                "[%s] %s page %s: +%s dòng",
+                cfg["source_id"],
+                month_label,
+                page_number,
+                len(page_rows),
+            )
 
+            has_more = bool(
+                has_more_key
+                and isinstance(payload, dict)
+                and payload.get(has_more_key, False)
+            )
+            if not has_more:
+                return pd.json_normalize(rows), page_number
+            if not scroll_key:
+                raise ValueError("API báo còn trang nhưng config thiếu scroll_key")
 
-    def _stream_to_db(self, df: pd.DataFrame, cfg: dict, dwh=None, replace: bool = False):
-        from sqlalchemy import Text
-        from sqlalchemy.dialects.postgresql import TIMESTAMP as PG_TS
+            scroll_value = payload.get(scroll_key)
+            if not scroll_value:
+                raise ValueError(
+                    f"API báo còn trang nhưng response thiếu scroll_key '{scroll_key}'"
+                )
+            if scroll_value in seen_scroll_values:
+                raise RuntimeError(
+                    f"API lặp scroll token tại page {page_number}: {scroll_value}"
+                )
+            seen_scroll_values.add(scroll_value)
+            request_params[scroll_key] = scroll_value
 
-        # Dùng engine truyền vào, không tạo mới
-        if dwh is None:
-            from sqlalchemy import create_engine
-            from src.connections import get_connection, get_sqlalchemy_uri
-            dwh = create_engine(get_sqlalchemy_uri(get_connection("dwh_postgres")))
+        raise RuntimeError(f"API vượt giới hạn max_pages={max_pages}")
 
-        schema, table = cfg["target_staging_table"].split(".")
-
-        dtype = {}
-        for c in df.columns:
-            if pd.api.types.is_datetime64_any_dtype(df[c]):
-                dtype[c] = PG_TS(timezone=True)
-            elif df[c].dtype == object:
-                dtype[c] = Text()
-
-        df.to_sql(
-            table, dwh, schema=schema, index=False,
-            if_exists="append",
-            method=None,      # ← dùng executemany mặc định, không giới hạn param
-            chunksize=1000,   # ← giữ 1000 dòng/batch cho nhanh
-            dtype=dtype,
+    def _build_result(self, dataframe: pd.DataFrame, source_meta: dict) -> ExtractResult:
+        dataframe = dataframe.copy()
+        dataframe["_source_id"] = self.source_config["source_id"]
+        return ExtractResult(
+            dataframe=dataframe,
+            row_count=len(dataframe),
+            checksum=None,
+            watermark_value=None,
+            source_meta=source_meta,
         )
 
-    def has_changed(self, last) -> bool:
+    def has_changed(self, last_checksum_or_watermark) -> bool:
         return True

@@ -126,6 +126,11 @@ def main() -> int:
     print("DQ metadata =", dict(dq_row) if dq_row else None)
     print("Registry status =", registry_status)
 
+    retry_check_label = (
+        "Failure gate retry observed"
+        if args.expect_retry
+        else "Failure gate executed once"
+    )
     checks = {
         "DAG run succeeded": dag_run.state == "success",
         "All expected tasks present": EXPECTED_TASKS.issubset(task_states),
@@ -149,7 +154,7 @@ def main() -> int:
             and dq_row["batch_id"] == batch_id
         ),
         "Registry batch loaded": registry_status == "loaded",
-        "Failure gate retry observed": (
+        retry_check_label: (
             task_tries.get("failure_gate", 0) >= (2 if args.expect_retry else 1)
         ),
     }

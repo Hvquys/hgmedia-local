@@ -7,7 +7,7 @@ Review date: 2026-09-08
 - Reviewed Docker Compose, environment handling, Python EL/DQ code, five Airflow
   DAG groups, 67 configured sources, 60 dbt SQL models, initialization SQL,
   scripts and tests.
-- `python -m unittest discover -s tests -v`: 7/7 passed.
+- `python -m unittest discover -s tests -v`: 21/21 passed after remediation.
 - `python -m compileall`: passed.
 - `python -m pip check`: passed.
 - `dbt parse --no-partial-parse`: passed.
@@ -18,6 +18,9 @@ Review date: 2026-09-08
 - `airflow dags list-import-errors`: no data found.
 - Airflow loaded all expected tasks for `dbt_transform_pipeline` and
   `phase12_sales_e2e` after the review changes.
+- Post-remediation run `manual__2026-09-08T06:30:31.470067+00:00` succeeded
+  with all seven tasks, DQ 9/9 and reconciliation 15/15. Registry batch
+  `phase6_sales_20260908_063038_195847` finished as `loaded`.
 
 The Phase 12 `phase6_sales` vertical slice is reproducible. This does not yet
 prove that every configured business source and every dbt model is production
@@ -38,17 +41,15 @@ ready.
 9. Removed stale generated files and duplicate `.gitignore` rules.
 10. Corrected README credentials, setup steps, Airflow password behavior and
     the MinIO API port used by `mc`.
+11. Reworked API pagination so all pages/months return to Bronze and any monthly
+    error rejects the whole batch instead of publishing partial success.
+12. Replaced destructive staging table recreation with a temporary-table plus
+    transactional `TRUNCATE + INSERT`; PostgreSQL integration checks prove that
+    table identity, constraints, indexes and previous data survive correctly.
+13. Validated and quoted configured SQL identifiers, and bound month/watermark
+    values as SQLAlchemy parameters.
 
 ## Open findings
-
-### Critical: API source does not preserve extracted data
-
-`ApiExtractor._extract_parallel_monthly()` returns an empty dataframe marked as
-streamed even when `stream_to_staging` is false. The configured `sale` source
-therefore can fetch rows and still load nothing. Per-month exceptions are also
-logged and swallowed, which can turn partial extraction into apparent success.
-Do not enable this source until the extractor returns/loads all pages and fails
-the batch when any month fails.
 
 ### High: broad source and model coverage is unverified
 
@@ -57,21 +58,6 @@ DQ rules currently cover only `partners` and `phase6_sales`. Most database,
 Google Sheet and Elasticsearch sources require their real credentials and
 schemas before they can be validated. Three business mappings remain TODO in
 `dim_distributed_employee`.
-
-### High: staging replacement is not atomic
-
-`StagingLoader` uses pandas `to_sql(if_exists="replace")` for truncate/full
-loads. This drops and recreates the table, which can remove grants, indexes and
-constraints, and a failed reload can leave the target absent or partial. Replace
-this with load-to-temporary-table followed by a transactional swap/truncate and
-insert.
-
-### High: SQL identifiers and watermark values are interpolated
-
-`SQLExtractor` and `StagingLoader` compose SQL with schema, table, column and
-watermark strings. Configuration is trusted today, but malformed identifiers or
-quoted values can break queries and increase injection risk. Validate/quote
-identifiers and bind watermark values as SQL parameters.
 
 ### Medium: one configured CSV is absent locally
 
@@ -95,18 +81,16 @@ passwords before allowing access outside the local machine. Changing the
 Airflow UI value in `.env` does not update an existing FAB user; use the reset
 command documented in README.
 
-### Medium: automated test depth is small
+### Medium: automated test depth remains incomplete
 
-The seven tests cover CSV incrementality and Phase 12 DQ metadata. There are no
-automated tests for SQL query generation, API pagination/failure, staging
-atomicity, rollback, Google Sheet parsing, Elasticsearch pagination or the full
-dbt model set.
+The 21 tests now cover CSV incrementality, Phase 12 DQ metadata, API
+pagination/failure, SQL query safety, staging replacement and configuration
+drift. There are still no automated integration tests for rollback, Google
+Sheet parsing, Elasticsearch pagination or the full dbt model set.
 
 ## Recommended order
 
 1. Keep Phase 12 as the release smoke test.
-2. Repair and test `ApiExtractor` before enabling `sale`.
-3. Make staging full loads atomic and quote/bind SQL safely.
-4. Add one real source at a time with DQ and reconciliation evidence.
-5. Complete the three unresolved employee mappings.
-6. Pin dependencies and rotate local credentials before any shared deployment.
+2. Add one real source at a time with DQ and reconciliation evidence.
+3. Complete the three unresolved employee mappings.
+4. Pin dependencies and rotate local credentials before any shared deployment.

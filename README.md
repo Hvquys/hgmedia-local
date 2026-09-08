@@ -172,6 +172,15 @@ docker compose exec airflow-scheduler python /opt/airflow/project/scripts/verify
 Verifier yêu cầu cả 7 task thành công, batch có trạng thái `loaded`, DQ đạt 9/9,
 reconciliation đạt 15/15 và metadata DQ liên kết đúng Airflow DAG run.
 
+Kiểm tra riêng cơ chế full load an toàn trên PostgreSQL local:
+
+```powershell
+python scripts/validate_pipeline_safety.py
+```
+
+Script xác nhận table identity, constraint và index được giữ lại; đồng thời cố ý
+gây một lần load lỗi để chứng minh transaction rollback về dữ liệu trước đó.
+
 ## Thêm 1 nguồn mới
 
 1. Thêm entry vào `config/google_sheet_sources.yaml` (nếu Google Sheet) hoặc
