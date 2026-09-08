@@ -116,6 +116,32 @@ DAG có timeout 1 giờ.
 - `el_elastic_pipeline` — mỗi 6 tiếng, Dynamic Task Mapping qua `config/elastic_sources.yaml`.
 - `dbt_transform_pipeline` — chờ các EL DAG rồi chạy `dbt run` và `dbt test`.
 
+### Phase 12: chạy vertical slice end-to-end
+
+`phase12_sales_e2e` chạy một batch `phase6_sales` xuyên suốt bằng Airflow:
+
+```text
+get_source → extract → failure_gate → load → data_quality → dbt_build → reconcile
+```
+
+Trigger lần chạy bình thường và kiểm tra metadata:
+
+```powershell
+docker compose exec airflow-scheduler bash /opt/airflow/project/scripts/trigger_phase12_airflow.sh success
+docker compose exec airflow-scheduler python /opt/airflow/project/scripts/verify_phase12_airflow_metadata.py
+```
+
+Kiểm tra recovery: `failure_gate` cố ý lỗi ở lần đầu, sau 10 giây Airflow retry
+và tiếp tục cùng batch từ XCom:
+
+```powershell
+docker compose exec airflow-scheduler bash /opt/airflow/project/scripts/trigger_phase12_airflow.sh recovery
+docker compose exec airflow-scheduler python /opt/airflow/project/scripts/verify_phase12_airflow_metadata.py --expect-retry
+```
+
+Verifier yêu cầu cả 7 task thành công, batch có trạng thái `loaded`, DQ đạt 9/9,
+reconciliation đạt 15/15 và metadata DQ liên kết đúng Airflow DAG run.
+
 ## Thêm 1 nguồn mới
 
 1. Thêm entry vào `config/google_sheet_sources.yaml` (nếu Google Sheet) hoặc
