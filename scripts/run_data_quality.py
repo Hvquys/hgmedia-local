@@ -5,6 +5,8 @@ import sys
 import uuid
 from pathlib import Path
 
+import pandas as pd
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -47,6 +49,28 @@ def get_batch_id(dataframe) -> str | None:
 
     if len(batch_values) == 1:
         return batch_values[0]
+
+    if "_loaded_at" in dataframe.columns:
+        loaded_at = pd.to_datetime(
+            dataframe["_loaded_at"],
+            errors="coerce",
+        )
+        latest_loaded_at = loaded_at.max()
+
+        if not pd.isna(latest_loaded_at):
+            latest_batches = (
+                dataframe.loc[
+                    loaded_at == latest_loaded_at,
+                    "_batch_id",
+                ]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+            if len(latest_batches) == 1:
+                return latest_batches[0]
 
     return None
 

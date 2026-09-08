@@ -91,6 +91,7 @@ def el_csv_pipeline():
                 source_config,
                 extract_result["batch_id"],
                 extract_result["minio_path"],
+                load_mode=extract_result.get("load_mode_override"),
             )
 
         print(f"✅ [{source_id}] loaded ({row_count} rows)")

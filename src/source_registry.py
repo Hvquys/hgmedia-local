@@ -28,6 +28,19 @@ class SourceRegistry:
             row = conn.execute(query, {"source_id": source_id}).mappings().fetchone()
         return dict(row) if row else None
 
+    def get_batch(self, batch_id: str) -> Optional[dict]:
+        query = text("""
+            SELECT * FROM meta._source_registry
+            WHERE batch_id = :batch_id
+            LIMIT 1
+        """)
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                query,
+                {"batch_id": batch_id},
+            ).mappings().fetchone()
+        return dict(row) if row else None
+
     def register_extracted(
         self, source_id: str, source_type: str, connection_name: Optional[str],
         batch_id: str, minio_path: str, row_count: int,
@@ -53,7 +66,9 @@ class SourceRegistry:
     def mark_loaded(self, batch_id: str):
         query = text("""
             UPDATE meta._source_registry
-            SET status = 'loaded', loaded_at = :loaded_at
+            SET status = 'loaded',
+                loaded_at = :loaded_at,
+                error_message = NULL
             WHERE batch_id = :batch_id
         """)
         with self.engine.begin() as conn:

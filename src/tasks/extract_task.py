@@ -25,19 +25,43 @@ def run_extract(source_config: dict, force: bool = False) -> dict | None:
     extractor = get_extractor(source_config)
 
     last_success = registry.get_last_success(source_id)
-    last_marker = None
+    last_change_marker = None
+    last_watermark = None
     if last_success:
-        last_marker = last_success.get("watermark_value") or last_success.get("checksum")
+        last_watermark = last_success.get("watermark_value")
+        if source_type in {"csv", "google_sheet"}:
+            last_change_marker = last_success.get("checksum")
+        else:
+            last_change_marker = last_watermark or last_success.get("checksum")
 
-    if not force and not extractor.has_changed(last_marker):
+    if not force and not extractor.has_changed(last_change_marker):
         logger.info(f"[{source_id}] Không có thay đổi, skip extract.")
         return None
 
     extra_kwargs = {}
-    if source_type == "sql" and source_config.get("incremental") and last_marker:
-        extra_kwargs["watermark_filter"] = last_marker
+    if (
+        source_type in {"csv", "sql"}
+        and source_config.get("incremental")
+        and last_watermark
+        and not force
+    ):
+        extra_kwargs["watermark_filter"] = last_watermark
 
     result = extractor.extract(**extra_kwargs)
+    load_mode_override = None
+
+    if (
+        source_type == "csv"
+        and source_config.get("incremental")
+        and result.row_count == 0
+        and result.checksum != last_change_marker
+    ):
+        logger.info(
+            f"[{source_id}] CSV đổi nhưng không có watermark mới; "
+            "chạy lại toàn snapshot để nhận cập nhật bản ghi cũ."
+        )
+        result = extractor.extract()
+        load_mode_override = "truncate"
 
 
     if result.source_meta and result.source_meta.get("streamed"):
@@ -63,5 +87,9 @@ def run_extract(source_config: dict, force: bool = False) -> dict | None:
     )
 
     logger.info(f"[{source_id}] Extract xong: {result.row_count} dòng -> {minio_path}")
-    return {"source_id": source_id, "batch_id": batch_id, "minio_path": minio_path}
-    
+    return {
+        "source_id": source_id,
+        "batch_id": batch_id,
+        "minio_path": minio_path,
+        "load_mode_override": load_mode_override,
+    }

@@ -5,6 +5,8 @@ Dùng để test pipeline cục bộ trước khi gắn vào Airflow.
 Ví dụ:
     python main.py run --id dim_partners
     python main.py run --id fact_distribution --force
+    python main.py run --id phase6_sales --full
+    python main.py retry --id phase6_sales --batch-id phase6_sales_...
     python main.py run --type google_sheet          # chạy tất cả nguồn Google Sheet
     python main.py run --type sql                    # chạy tất cả nguồn DB
     python main.py rollback --id fact_distribution --date 2026-06-01
@@ -23,24 +25,45 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 
-def run_one(source_config: dict, force: bool = False):
-    extract_result = run_extract(source_config, force=force)
+def run_one(
+    source_config: dict,
+    force: bool = False,
+    full: bool = False,
+):
+    extract_result = run_extract(
+        source_config,
+        force=force or full,
+    )
     if extract_result is None:
         logger.info(f"[{source_config['source_id']}] Skip (không có thay đổi hoặc 0 dòng).")
         return
     if extract_result.get("streamed"):
         logger.info(f"[{source_config['source_id']}] Đã stream {extract_result.get('row_count')} dòng vào staging.")
         return
-    run_load(source_config, extract_result["batch_id"], extract_result["minio_path"])
+    load_mode = (
+        "truncate"
+        if full
+        else extract_result.get("load_mode_override")
+    )
+    run_load(
+        source_config,
+        extract_result["batch_id"],
+        extract_result["minio_path"],
+        load_mode=load_mode,
+    )
 
 
 def cmd_run(args):
     if getattr(args, "month", None):
         src = get_source_by_id(args.id); src["month_filter"] = args.month
-        run_one(src, force=args.force)
+        run_one(src, force=args.force, full=args.full)
         return
     if args.id:
-        run_one(get_source_by_id(args.id), force=args.force)
+        run_one(
+            get_source_by_id(args.id),
+            force=args.force,
+            full=args.full,
+        )
         return
 
     sources = load_all_sources()
@@ -49,7 +72,7 @@ def cmd_run(args):
 
     for src in sources:
         try:
-            run_one(src, force=args.force)
+            run_one(src, force=args.force, full=args.full)
         except Exception as e:
             logger.error(f"[{src['source_id']}] Lỗi: {e}")
 
@@ -66,14 +89,55 @@ def cmd_history(args):
     print(df.to_string(index=False))
 
 
+def cmd_retry(args):
+    source_config = get_source_by_id(args.id)
+    registry = SourceRegistry()
+    batch = registry.get_batch(args.batch_id)
+
+    if batch is None:
+        raise ValueError(
+            f"Không tìm thấy batch_id: {args.batch_id}"
+        )
+
+    if batch["source_id"] != args.id:
+        raise ValueError(
+            f"Batch {args.batch_id} thuộc "
+            f"source_id={batch['source_id']}, không phải {args.id}"
+        )
+
+    row_count = run_load(
+        source_config,
+        args.batch_id,
+        batch["minio_path"],
+    )
+    logger.info(
+        f"[{args.id}] Retry batch {args.batch_id} "
+        f"thành công ({row_count} dòng)."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="DWH Extract-Load CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     p_run = subparsers.add_parser("run", help="Chạy extract + load cho 1 hoặc nhiều source")
     p_run.add_argument("--id", help="source_id cụ thể")
-    p_run.add_argument("--type", choices=["google_sheet", "sql"], help="chạy tất cả nguồn theo loại")
-    p_run.add_argument("--force", action="store_true", help="bỏ qua check has_changed, luôn extract lại")
+    p_run.add_argument(
+        "--type",
+        choices=["google_sheet", "sql", "csv", "fx"],
+        help="chạy tất cả nguồn theo loại",
+    )
+    run_mode = p_run.add_mutually_exclusive_group()
+    run_mode.add_argument(
+        "--force",
+        action="store_true",
+        help="bỏ qua check has_changed, luôn extract lại",
+    )
+    run_mode.add_argument(
+        "--full",
+        action="store_true",
+        help="bỏ qua change detection và replace toàn bộ bảng Staging",
+    )
     p_run.add_argument("--month", help="lọc theo tháng YYYY-MM (chỉ nạp tháng đó)")
     p_run.set_defaults(func=cmd_run)
 
@@ -85,6 +149,14 @@ def main():
     p_history = subparsers.add_parser("history", help="Xem lịch sử extract/load của 1 source")
     p_history.add_argument("--id", required=True)
     p_history.set_defaults(func=cmd_history)
+
+    p_retry = subparsers.add_parser(
+        "retry",
+        help="Chạy lại một batch đã có từ Parquet trên MinIO",
+    )
+    p_retry.add_argument("--id", required=True)
+    p_retry.add_argument("--batch-id", required=True)
+    p_retry.set_defaults(func=cmd_retry)
 
     args = parser.parse_args()
     args.func(args)

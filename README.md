@@ -46,6 +46,15 @@ python main.py run --id dim_partners
 # Bỏ qua check has_changed, luôn extract lại
 python main.py run --id fact_distribution --force
 
+# Full Load: extract lại và replace toàn bộ bảng Staging
+python main.py run --id phase6_sales --full
+
+# Chạy Incremental; nếu checksum không đổi, pipeline tự skip
+python main.py run --id phase6_sales
+
+# Retry batch lỗi từ đúng Parquet đã lưu trên MinIO
+python main.py retry --id phase6_sales --batch-id phase6_sales_YYYYMMDD_HHMMSS_microseconds
+
 # Chạy tất cả nguồn theo loại
 python main.py run --type google_sheet
 python main.py run --type sql

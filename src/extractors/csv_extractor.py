@@ -1,5 +1,9 @@
-import pandas as pd
+import hashlib
+from pathlib import Path
 from typing import Optional
+
+import pandas as pd
+
 from src.extractors.base import BaseExtractor, ExtractResult
 
 
@@ -33,9 +37,54 @@ class CsvExtractor(BaseExtractor):
         df = pd.read_csv(cfg["file_path"], dtype=str, sep=cfg.get("sep", ","),
                          on_bad_lines="skip", engine="python", quotechar='"')
         df.columns = [str(c).strip() for c in df.columns]
-        df["_source_id"] = cfg["source_id"]
-        return ExtractResult(dataframe=df, row_count=len(df), checksum=None,
-                             watermark_value=None, source_meta={"file": cfg["file_path"]})
 
-    def has_changed(self, last):
-        return True
+        watermark_column = cfg.get("watermark_column")
+        watermark_value = None
+
+        if watermark_column:
+            if watermark_column not in df.columns:
+                raise ValueError(
+                    f"Không tìm thấy watermark_column '{watermark_column}' "
+                    f"trong CSV {cfg['file_path']}"
+                )
+
+            parsed_watermark = pd.to_datetime(
+                df[watermark_column],
+                errors="coerce",
+            )
+
+            if parsed_watermark.notna().any():
+                watermark_value = str(parsed_watermark.max())
+
+            if cfg.get("incremental") and watermark_filter:
+                last_watermark = pd.to_datetime(
+                    watermark_filter,
+                    errors="raise",
+                )
+                df = df.loc[parsed_watermark > last_watermark].copy()
+
+        df["_source_id"] = cfg["source_id"]
+
+        return ExtractResult(
+            dataframe=df,
+            row_count=len(df),
+            checksum=self._compute_checksum(),
+            watermark_value=watermark_value,
+            source_meta={"file": cfg["file_path"]},
+        )
+
+    def has_changed(self, last_checksum_or_watermark: Optional[str]) -> bool:
+        if last_checksum_or_watermark is None:
+            return True
+
+        return self._compute_checksum() != last_checksum_or_watermark
+
+    def _compute_checksum(self) -> str:
+        file_path = Path(self.source_config["file_path"])
+        digest = hashlib.sha256()
+
+        with file_path.open("rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(chunk)
+
+        return digest.hexdigest()

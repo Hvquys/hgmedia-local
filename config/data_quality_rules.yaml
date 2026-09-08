@@ -46,9 +46,9 @@ data_quality_rules:
 
     rules:
       - id: phase6_sales_row_count
-        expectation: expect_table_row_count_to_equal
+        expectation: expect_table_row_count_to_be_between
         kwargs:
-          value: 5
+          min_value: 1
         severity: critical
 
       - id: phase6_sales_sale_id_not_null

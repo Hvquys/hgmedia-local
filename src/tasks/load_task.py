@@ -12,10 +12,15 @@ from src.source_registry import SourceRegistry
 logger = logging.getLogger(__name__)
 
 
-def run_load(source_config: dict, batch_id: str, minio_path: str):
+def run_load(
+    source_config: dict,
+    batch_id: str,
+    minio_path: str,
+    load_mode: str | None = None,
+):
     source_id = source_config["source_id"]
     staging_table = source_config["target_staging_table"]
-    load_mode = source_config.get("load_mode", "append")
+    effective_load_mode = load_mode or source_config.get("load_mode", "append")
     upsert_key = source_config.get("upsert_key")
 
     minio = MinIOClient()
@@ -26,7 +31,7 @@ def run_load(source_config: dict, batch_id: str, minio_path: str):
         df = minio.download_dataframe(minio_path)
         row_count = loader.load(
             df, staging_table=staging_table, batch_id=batch_id,
-            load_mode=load_mode, upsert_key=upsert_key,
+            load_mode=effective_load_mode, upsert_key=upsert_key,
         )
         registry.mark_loaded(batch_id)
         logger.info(f"[{source_id}] Load xong {row_count} dòng vào {staging_table}")

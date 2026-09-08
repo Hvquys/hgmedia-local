@@ -101,16 +101,26 @@ def main() -> int:
         minio_path
     )
 
-    staging_query = text(f"""
+    staging_batch_query = text(f"""
         SELECT *
         FROM {source_config["target_staging_table"]}
         WHERE _batch_id = :batch_id
     """)
 
-    silver_query = text(f"""
+    silver_batch_query = text(f"""
         SELECT *
         FROM {SILVER_TABLE}
         WHERE _batch_id = :batch_id
+    """)
+
+    staging_snapshot_query = text(f"""
+        SELECT *
+        FROM {source_config["target_staging_table"]}
+    """)
+
+    silver_snapshot_query = text(f"""
+        SELECT *
+        FROM {SILVER_TABLE}
     """)
 
     gold_query = text(f"""
@@ -122,16 +132,26 @@ def main() -> int:
     """)
 
     with engine.connect() as conn:
-        staging_df = pd.read_sql(
-            staging_query,
+        staging_batch_df = pd.read_sql(
+            staging_batch_query,
             conn,
             params={"batch_id": batch_id},
         )
 
-        silver_df = pd.read_sql(
-            silver_query,
+        silver_batch_df = pd.read_sql(
+            silver_batch_query,
             conn,
             params={"batch_id": batch_id},
+        )
+
+        staging_snapshot_df = pd.read_sql(
+            staging_snapshot_query,
+            conn,
+        )
+
+        silver_snapshot_df = pd.read_sql(
+            silver_snapshot_query,
+            conn,
         )
 
         gold_df = pd.read_sql(
@@ -153,15 +173,26 @@ def main() -> int:
         )
     )
 
-    staging_total = decimal_sum(
+    staging_batch_total = decimal_sum(
         pd.to_numeric(
-            staging_df["amount"],
+            staging_batch_df["amount"],
             errors="raise",
         )
     )
 
-    silver_total = decimal_sum(
-        silver_df["amount"]
+    silver_batch_total = decimal_sum(
+        silver_batch_df["amount"]
+    )
+
+    staging_snapshot_total = decimal_sum(
+        pd.to_numeric(
+            staging_snapshot_df["amount"],
+            errors="raise",
+        )
+    )
+
+    silver_snapshot_total = decimal_sum(
+        silver_snapshot_df["amount"]
     )
 
     gold_total = decimal_sum(
@@ -180,63 +211,78 @@ def main() -> int:
 
     checks = [
         print_check(
-            "Source rows = registry rows",
-            len(source_df),
+            "Registry rows = Bronze delta rows",
             registry_count,
+            len(bronze_df),
         ),
         print_check(
-            "Source rows = Bronze rows",
+            "Bronze delta = Staging batch rows",
+            len(bronze_df),
+            len(staging_batch_df),
+        ),
+        print_check(
+            "Staging batch = Silver batch rows",
+            len(staging_batch_df),
+            len(silver_batch_df),
+        ),
+        print_check(
+            "Bronze delta keys = Staging batch",
+            key_set(bronze_df),
+            key_set(staging_batch_df),
+        ),
+        print_check(
+            "Staging batch keys = Silver batch",
+            key_set(staging_batch_df),
+            key_set(silver_batch_df),
+        ),
+        print_check(
+            "Bronze delta amount = Staging batch",
+            bronze_total,
+            staging_batch_total,
+        ),
+        print_check(
+            "Staging batch amount = Silver batch",
+            staging_batch_total,
+            silver_batch_total,
+        ),
+        print_check(
+            "Source rows = Staging snapshot rows",
             len(source_df),
-            len(bronze_df),
+            len(staging_snapshot_df),
         ),
         print_check(
-            "Bronze rows = Staging rows",
-            len(bronze_df),
-            len(staging_df),
+            "Staging snapshot = Silver rows",
+            len(staging_snapshot_df),
+            len(silver_snapshot_df),
         ),
         print_check(
-            "Staging rows = Silver rows",
-            len(staging_df),
-            len(silver_df),
-        ),
-        print_check(
-            "Silver rows = Gold sale_count",
-            len(silver_df),
+            "Silver snapshot = Gold sale_count",
+            len(silver_snapshot_df),
             gold_sale_count,
         ),
         print_check(
-            "Source keys = Bronze keys",
+            "Source keys = Staging snapshot keys",
             key_set(source_df),
-            key_set(bronze_df),
+            key_set(staging_snapshot_df),
         ),
         print_check(
-            "Bronze keys = Staging keys",
-            key_set(bronze_df),
-            key_set(staging_df),
+            "Staging keys = Silver snapshot keys",
+            key_set(staging_snapshot_df),
+            key_set(silver_snapshot_df),
         ),
         print_check(
-            "Staging keys = Silver keys",
-            key_set(staging_df),
-            key_set(silver_df),
-        ),
-        print_check(
-            "Source amount = Bronze amount",
+            "Source amount = Staging snapshot",
             source_total,
-            bronze_total,
+            staging_snapshot_total,
         ),
         print_check(
-            "Bronze amount = Staging amount",
-            bronze_total,
-            staging_total,
+            "Staging amount = Silver snapshot",
+            staging_snapshot_total,
+            silver_snapshot_total,
         ),
         print_check(
-            "Staging amount = Silver amount",
-            staging_total,
-            silver_total,
-        ),
-        print_check(
-            "Silver amount = Gold amount",
-            silver_total,
+            "Silver snapshot amount = Gold amount",
+            silver_snapshot_total,
             gold_total,
         ),
     ]

@@ -6,7 +6,11 @@ csv_sources:
     file_path: "data/samples/phase6_sales.csv"
     sep: ","
     target_staging_table: "staging.phase6_sales"
-    load_mode: "truncate"
+    incremental: true
+    watermark_column: "sale_date"
+    load_mode: "upsert"
+    upsert_key:
+      - "sale_id"
     stream_to_staging: false
     chunksize: 5000
 
@@ -33,4 +37,3 @@ csv_sources:
     load_mode: "truncate"
     stream_to_staging: false
     batch_days: 30
-

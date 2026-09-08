@@ -67,5 +67,5 @@ class MinIOClient:
 
     @staticmethod
     def make_batch_id(source_id: str) -> str:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         return f"{source_id}_{ts}"
