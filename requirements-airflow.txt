@@ -1,6 +1,6 @@
-apache-airflow>=2.9
+apache-airflow==3.3.1
+apache-airflow-providers-fab
+apache-airflow-providers-standard
 apache-airflow-providers-postgres
 apache-airflow-providers-microsoft-mssql
-dbt-postgres>=1.7
-astronomer-cosmos>=1.5
-great-expectations==1.20.0
+dbt-postgres==1.11.0

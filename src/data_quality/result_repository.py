@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, text
 
@@ -56,7 +56,7 @@ class DataQualityRepository:
                 "target_table": target_table,
                 "batch_id": batch_id,
                 "status": status,
-                "started_at": datetime.now(),
+                "started_at": datetime.now(timezone.utc).replace(tzinfo=None),
                 "config_hash": config_hash,
             })
 
@@ -157,6 +157,6 @@ class DataQualityRepository:
                 "passed_rules": passed_rules,
                 "failed_rules": failed_rules,
                 "success_percent": success_percent,
-                "finished_at": datetime.now(),
+                "finished_at": datetime.now(timezone.utc).replace(tzinfo=None),
                 "error_message": error_message,
             })

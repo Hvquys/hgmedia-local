@@ -78,18 +78,43 @@ dbt test --profiles-dir .
 
 ## Chạy qua Airflow
 
-```bash
-pip install -r requirements-airflow.txt
-export AIRFLOW_HOME=~/airflow
-airflow db init
+Airflow 3 chạy trong Linux containers trên Docker Desktop. Cấu hình local dùng
+`LocalExecutor`, một PostgreSQL metadata riêng và mount trực tiếp `src/dags` vào
+thư mục DAG của Airflow.
+
+```powershell
+# Khởi tạo metadata DB và tài khoản admin
+docker compose build airflow-init
+docker compose up airflow-init
+
+# Khởi động các thành phần Airflow
+docker compose up -d airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+docker compose ps
+
+# Kiểm tra import và dependency của DAG Phase 11
+docker compose exec airflow-scheduler airflow dags list-import-errors
+docker compose exec airflow-scheduler airflow dags list
+docker compose exec airflow-scheduler airflow tasks list el_csv_pipeline
+
+# Trigger bài kiểm thử Phase 11 (đọc JSON trong container để tránh lỗi escape PowerShell)
+docker compose exec airflow-scheduler airflow dags unpause -y el_csv_pipeline
+docker compose exec airflow-scheduler bash /opt/airflow/project/scripts/trigger_phase11_airflow.sh
+docker compose exec airflow-scheduler airflow dags list-runs el_csv_pipeline
+docker compose exec airflow-scheduler bash /opt/airflow/project/scripts/validate_phase11_airflow.sh
 ```
 
-Copy project vào server Airflow, symlink `src/dags/*.py` vào `$AIRFLOW_HOME/dags/`.
+Mở `http://localhost:8080`, đăng nhập bằng `AIRFLOW_ADMIN_USERNAME` và
+`AIRFLOW_ADMIN_PASSWORD` trong `.env`, sau đó unpause `el_csv_pipeline` và trigger
+với `selected_tables=["phase6_sales"]`, `force=true`. DAG có chuỗi task
+`get_sources -> extract -> load`; kết quả extract chứa `batch_id` và `minio_path`
+được truyền sang task load qua XCom. Task có 1 lần retry, timeout 30 phút và toàn
+DAG có timeout 1 giờ.
 
+- `el_csv_pipeline` — 5h sáng mỗi ngày; mặc định chạy mẫu local `phase6_sales`.
 - `el_google_sheet_pipeline` — 6h sáng mỗi ngày, Dynamic Task Mapping qua `config/google_sheet_sources.yaml`.
-- `el_database_pipeline` — mỗi 4 tiếng, Dynamic Task Mapping qua `config/db_sources.yaml`
-  (gồm cả Odoo lẫn 3 SQL Server, chạy song song vì khác connection).
-- `dbt_transform_pipeline` — chờ cả 2 DAG trên (`ExternalTaskSensor`) rồi chạy `dbt run` + `dbt test`.
+- `el_database_pipeline` — mỗi 4 tiếng, Dynamic Task Mapping qua `config/db_sources.yaml`.
+- `el_elastic_pipeline` — mỗi 6 tiếng, Dynamic Task Mapping qua `config/elastic_sources.yaml`.
+- `dbt_transform_pipeline` — chờ các EL DAG rồi chạy `dbt run` và `dbt test`.
 
 ## Thêm 1 nguồn mới
 

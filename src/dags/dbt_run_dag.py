@@ -12,11 +12,13 @@ Lịch tự động (7h30): chạy toàn bộ, chờ đủ 4 EL DAGs.
 import os
 from datetime import datetime, timedelta
 
-from airflow import DAG
-from airflow.operators.bash import BashOperator
-from airflow.sensors.external_task import ExternalTaskSensor
-from airflow.operators.python import BranchPythonOperator, PythonOperator
-from airflow.models.param import Param
+from airflow.providers.standard.operators.bash import BashOperator
+from airflow.providers.standard.operators.python import (
+    BranchPythonOperator,
+    PythonOperator,
+)
+from airflow.providers.standard.sensors.external_task import ExternalTaskSensor
+from airflow.sdk import DAG, Param, TaskGroup
 
 PROJECT_ROOT = os.environ.get(
     "DWH_PROJECT_ROOT",
@@ -42,11 +44,12 @@ SILVER_FACT_MODELS = [
     "fact_music_evaluation", "fact_po_detail", "fact_purchase_cost",
     "fact_revenue_by_resources", "fact_revenue_distro", "fact_revenue_yt",
     "fact_so_detail", "fact_view_stream_distro", "fact_view_yt",
-    "fact_youtube_operation",
+    "fact_youtube_operation", "fact_phase6_sales",
 ]
 
 GOLD_MODELS = [
     "int_stock_video", "mart_resource_channel", "mart_team_usage",
+    "mart_phase6_daily_sales",
 ]
 
 ALL_MODELS = SILVER_DIM_MODELS + SILVER_FACT_MODELS + GOLD_MODELS
@@ -139,7 +142,6 @@ with DAG(
     )
 
     # Sensors chờ EL DAGs
-    from airflow.utils.task_group import TaskGroup
     with TaskGroup("wait_el_sensors") as wait_group:
         wait_google_sheet = ExternalTaskSensor(
             task_id="wait_el_google_sheet",

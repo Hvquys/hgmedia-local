@@ -74,15 +74,20 @@ def main() -> int:
         get_sqlalchemy_uri(connection)
     )
 
-    registry_query = text("""
+    registry_query = text(f"""
         SELECT
             batch_id,
             minio_path,
             row_count
         FROM meta._source_registry
-        WHERE source_id = :source_id
+        WHERE batch_id = (
+            SELECT _batch_id
+            FROM {source_config["target_staging_table"]}
+            ORDER BY _loaded_at DESC
+            LIMIT 1
+        )
+          AND source_id = :source_id
           AND status = 'loaded'
-        ORDER BY loaded_at DESC
         LIMIT 1
     """)
 

@@ -4,7 +4,7 @@ Load DataFrame thô (đã download từ MinIO) vào Postgres schema "staging".
 KHÔNG áp business rule (join, tính cột phái sinh) — phần đó để dbt models xử lý.
 Chỉ làm 3 việc: ép kiểu cơ bản, thêm cột metadata, ghi vào đúng bảng staging.<source_id>.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from sqlalchemy import create_engine
@@ -48,7 +48,7 @@ class StagingLoader:
                     lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v
                 )
         df["_batch_id"] = batch_id
-        df["_loaded_at"] = datetime.now()
+        df["_loaded_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
 
         schema, table = staging_table.split(".")
 

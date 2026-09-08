@@ -13,8 +13,7 @@ PROJECT_ROOT = os.environ.get(
     "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline"
 )
 
-from airflow.sdk import dag, task
-from airflow.models.param import Param
+from airflow.sdk import Param, dag, task
 
 ALL_SOURCES = ["channel_video_info", "channel_video_metric"]
 
@@ -113,6 +112,7 @@ def el_elastic_pipeline():
                 source_config,
                 extract_result["batch_id"],
                 extract_result["minio_path"],
+                load_mode=extract_result.get("load_mode_override"),
             )
 
         print(f"✅ [{source_id}] loaded ({row_count} rows)")

@@ -13,13 +13,13 @@ PROJECT_ROOT = os.environ.get(
     "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline"
 )
 
-from airflow.sdk import dag, task
-from airflow.models.param import Param
+from airflow.sdk import Param, dag, task
 
-ALL_SOURCES = ["sale", "stream_distro", "usd_rate"]
+ALL_SOURCES = ["phase6_sales", "stream_distro", "usd_rate"]
+DEFAULT_SOURCES = ["phase6_sales"]
 
 SOURCE_DESCRIPTIONS = {
-    "sale":         "CSV - Dữ liệu doanh thu (Discover session)",
+    "phase6_sales": "CSV - Vertical slice local đã kiểm thử",
     "stream_distro":"CSV - Lượt stream distro (fact_view_stream)",
     "usd_rate":     "FX  - Tỷ giá USD/VND hàng ngày",
 }
@@ -28,6 +28,7 @@ default_args = {
     "owner": "data-team",
     "retries": 1,
     "retry_delay": timedelta(minutes=5),
+    "execution_timeout": timedelta(minutes=30),
 }
 
 
@@ -36,11 +37,12 @@ default_args = {
     schedule="0 5 * * *",
     start_date=datetime(2026, 1, 1),
     catchup=False,
+    dagrun_timeout=timedelta(hours=1),
     default_args=default_args,
     tags=["el", "csv"],
     params={
         "selected_tables": Param(
-            default=ALL_SOURCES,
+            default=DEFAULT_SOURCES,
             type="array",
             title="Chọn bảng cần chạy",
             description=(
@@ -49,6 +51,12 @@ default_args = {
             ),
             examples=ALL_SOURCES,
             items={"type": "string", "enum": ALL_SOURCES},
+        ),
+        "force": Param(
+            default=False,
+            type="boolean",
+            title="Buộc extract lại",
+            description="Bỏ qua kiểm tra checksum để tạo batch kiểm thử mới.",
         ),
     },
 )
@@ -61,28 +69,53 @@ def el_csv_pipeline():
         os.chdir(PROJECT_ROOT)
         from src.config_loader import load_sources
 
-        selected = context["params"].get("selected_tables", ALL_SOURCES)
+        selected = context["params"].get("selected_tables", DEFAULT_SOURCES)
+        force = context["params"].get("force", False)
         all_sources = load_sources("config/csv_sources.yaml", "csv_sources")
 
         filtered = [s for s in all_sources if s["source_id"] in selected]
+        for source in filtered:
+            source["_airflow_force"] = force
         print(f"✅ Sẽ chạy {len(filtered)}/{len(all_sources)} bảng: {[s['source_id'] for s in filtered]}")
         return filtered
 
     @task
-    def extract_and_load(source_config: dict):
+    def extract(source_config: dict):
         import sys, os
         sys.path.insert(0, PROJECT_ROOT)
         os.chdir(PROJECT_ROOT)
         from src.tasks.extract_task import run_extract
-        from src.tasks.load_task import run_load
 
         source_id = source_config["source_id"]
         print(f"▶ Bắt đầu extract: {source_id}")
 
-        extract_result = run_extract(source_config)
+        extract_result = run_extract(
+            source_config,
+            force=bool(source_config.get("_airflow_force", False)),
+        )
         if extract_result is None:
             print(f"⏭ [{source_id}] skip")
-            return f"[{source_id}] skip"
+            return None
+
+        return {
+            "source_config": source_config,
+            "extract_result": extract_result,
+        }
+
+    @task
+    def load(payload: dict | None):
+        import sys, os
+        sys.path.insert(0, PROJECT_ROOT)
+        os.chdir(PROJECT_ROOT)
+        from src.tasks.load_task import run_load
+
+        if payload is None:
+            print("⏭ Không có batch mới để load")
+            return "skip"
+
+        source_config = payload["source_config"]
+        extract_result = payload["extract_result"]
+        source_id = source_config["source_id"]
 
         if extract_result.get("streamed"):
             row_count = extract_result["row_count"]
@@ -98,7 +131,8 @@ def el_csv_pipeline():
         return f"[{source_id}] loaded ({row_count} rows)"
 
     sources = get_sources()
-    extract_and_load.expand(source_config=sources)
+    extracted_batches = extract.expand(source_config=sources)
+    load.expand(payload=extracted_batches)
 
 
 el_csv_pipeline()

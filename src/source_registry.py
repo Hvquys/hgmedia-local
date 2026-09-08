@@ -3,7 +3,7 @@ source_registry.py
 Sổ cái dùng chung cho mọi loại nguồn (thay file_registry.py cũ chỉ dành cho Excel).
 Lưu trong Postgres schema meta._source_registry (xem scripts/init_schemas.sql).
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import pandas as pd
@@ -13,6 +13,10 @@ from src.connections import get_connection, get_sqlalchemy_uri
 
 
 class SourceRegistry:
+
+    @staticmethod
+    def _utc_now() -> datetime:
+        return datetime.now(timezone.utc).replace(tzinfo=None)
 
     def __init__(self):
         conn_cfg = get_connection("dwh_postgres")
@@ -60,7 +64,7 @@ class SourceRegistry:
                 "connection_name": connection_name, "batch_id": batch_id,
                 "minio_path": minio_path, "checksum": checksum,
                 "watermark_value": watermark_value, "row_count": row_count,
-                "extracted_at": datetime.now(),
+                "extracted_at": self._utc_now(),
             })
 
     def mark_loaded(self, batch_id: str):
@@ -72,7 +76,7 @@ class SourceRegistry:
             WHERE batch_id = :batch_id
         """)
         with self.engine.begin() as conn:
-            conn.execute(query, {"batch_id": batch_id, "loaded_at": datetime.now()})
+            conn.execute(query, {"batch_id": batch_id, "loaded_at": self._utc_now()})
 
     def mark_failed(self, batch_id: str, error_message: str):
         query = text("""

@@ -3,7 +3,7 @@ minio_client.py
 Wrapper mỏng quanh thư viện minio để upload/download raw data (parquet) vào lớp bronze.
 """
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from minio import Minio
@@ -67,5 +67,5 @@ class MinIOClient:
 
     @staticmethod
     def make_batch_id(source_id: str) -> str:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         return f"{source_id}_{ts}"

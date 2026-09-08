@@ -14,8 +14,7 @@ PROJECT_ROOT = os.environ.get(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
-from airflow.sdk import dag, task
-from airflow.models.param import Param
+from airflow.sdk import Param, dag, task
 
 # Danh sách tất cả bảng Google Sheet
 ALL_SOURCES = [
@@ -90,6 +89,7 @@ def el_google_sheet_pipeline():
                 source_config,
                 extract_result["batch_id"],
                 extract_result["minio_path"],
+                load_mode=extract_result.get("load_mode_override"),
             )
 
         print(f"✅ [{source_id}] loaded ({row_count} rows)")

@@ -15,8 +15,7 @@ PROJECT_ROOT = os.environ.get(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
-from airflow.sdk import dag, task
-from airflow.models.param import Param
+from airflow.sdk import Param, dag, task
 
 from src.config_loader import load_sources
 from src.tasks.extract_task import run_extract
@@ -148,6 +147,7 @@ def el_database_pipeline():
                 source_config,
                 extract_result["batch_id"],
                 extract_result["minio_path"],
+                load_mode=extract_result.get("load_mode_override"),
             )
 
         print(f"✅ [{source_id}] loaded ({row_count} rows)")
