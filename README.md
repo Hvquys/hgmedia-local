@@ -1,9 +1,16 @@
-   # DWH Pipeline — Google Sheet + Database → MinIO → Postgres (staging) → dbt (silver/gold)
+# DWH Pipeline — Google Sheet + Database → MinIO → Postgres (staging) → dbt (silver/gold)
 
 Pipeline EL (Extract-Load) bằng Python cho Google Sheet, database, CSV/FX,
 Elasticsearch và API, kết hợp dbt để transform. Nhánh `phase6_sales` là vertical
 slice đã được kiểm thử đầy đủ; xem `docs/PROJECT_REVIEW.md` để biết phạm vi còn
 phải hoàn thiện trước production.
+
+## Tài liệu vận hành local
+
+[`docs/LOCAL_RUNBOOK.md`](docs/LOCAL_RUNBOOK.md) là hướng dẫn chuẩn cho Phase 13:
+cài đặt lần đầu, start/stop, chạy thủ công, chạy bằng Airflow, xử lý lỗi và kiểm
+tra trước khi bàn giao. Phạm vi hoàn thành hiện tại là POC local `phase6_sales`;
+các nguồn nghiệp vụ khác không chặn giai đoạn này.
 
 ## Kiến trúc
 

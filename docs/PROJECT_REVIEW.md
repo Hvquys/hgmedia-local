@@ -51,6 +51,10 @@ ready.
 
 ## Open findings
 
+Các mục dưới đây nằm ngoài phạm vi POC local `phase6_sales` và không chặn Phase
+13. Chỉ xử lý một mục khi nguồn hoặc hình thức triển khai tương ứng được đưa vào
+phạm vi thực tế.
+
 ### High: broad source and model coverage is unverified
 
 Only `phase6_sales` has a complete Airflow EL → DQ → dbt → reconciliation test.
@@ -91,6 +95,9 @@ Sheet parsing, Elasticsearch pagination or the full dbt model set.
 ## Recommended order
 
 1. Keep Phase 12 as the release smoke test.
-2. Add one real source at a time with DQ and reconciliation evidence.
-3. Complete the three unresolved employee mappings.
-4. Pin dependencies and rotate local credentials before any shared deployment.
+2. Stop after Phase 13 for the current local POC.
+3. When scope expands, add one real source at a time with DQ and reconciliation
+   evidence.
+4. Complete the three unresolved employee mappings only when that model enters
+   scope.
+5. Pin dependencies and rotate local credentials before a shared deployment.
