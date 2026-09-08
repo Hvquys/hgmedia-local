@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 PROJECT_ROOT = os.environ.get(
     "DWH_PROJECT_ROOT",
-    "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline"
+    "/opt/airflow/project"
 )
 
 from airflow.sdk import Param, dag, task

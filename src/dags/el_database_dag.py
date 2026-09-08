@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 PROJECT_ROOT = os.environ.get(
     "DWH_PROJECT_ROOT",
-    "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline"
+    "/opt/airflow/project"
 )
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -25,12 +25,14 @@ from src.tasks.load_task import run_load
 ALL_SOURCES_BY_CONNECTION = {
     "odoo_pg": [
         "hr_employee", "purchase_order", "purchase_order_line", "res_partner",
-        "sale_order_line", "x_acceptance_cert", "x_music_plan", "x_music_plan_detail",
+        "res_users", "sale_order", "sale_order_line", "x_acceptance_cert",
+        "x_music_plan", "x_music_plan_detail",
         "x_music_plan_detail_price", "x_music_song", "x_product_genre",
         "x_product_subgenre", "x_project", "res_company", "hr_department", "hr_job",
     ],
     "hg_stock": [
-        "distribution_media_history", "groups", "resource_file_info", "roles",
+        "distribution_media_history", "groups", "resource_file_info",
+        "resource_file_action", "resource_folders", "roles",
         "user_departments", "users", "tracking_video_publish_infos",
         "resource_storage_history", "resource_files",
     ],

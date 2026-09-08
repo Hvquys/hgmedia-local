@@ -14,16 +14,9 @@ csv_sources:
     stream_to_staging: false
     chunksize: 5000
 
-  # - source_id: "sale"
-  #   source_type: "csv"
-  #   file_path: "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline/data/Untitled Discover session.csv"
-  #   sep: ","
-  #   target_staging_table: "staging.sale"
-  #   load_mode: "truncate"
-  #   stream_to_staging: true
   - source_id: "stream_distro"
     source_type: "csv"
-    file_path: "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline/data/fact_view_stream.csv"
+    file_path: "data/fact_view_stream.csv"
     sep: ","
     target_staging_table: "staging.stream_distro"
     load_mode: "truncate"

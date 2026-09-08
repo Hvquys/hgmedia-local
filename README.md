@@ -1,8 +1,9 @@
    # DWH Pipeline — Google Sheet + Database → MinIO → Postgres (staging) → dbt (silver/gold)
 
-Pipeline EL (Extract-Load) bằng Python cho 2 nhóm nguồn hiện tại (Google Sheet, Database),
-kết hợp dbt để transform. **Elasticsearch tạm bỏ qua**, sẽ bổ sung sau theo cùng pattern
-(`src/extractors/elasticsearch_extractor.py` + `config/elasticsearch_sources.yaml`).
+Pipeline EL (Extract-Load) bằng Python cho Google Sheet, database, CSV/FX,
+Elasticsearch và API, kết hợp dbt để transform. Nhánh `phase6_sales` là vertical
+slice đã được kiểm thử đầy đủ; xem `docs/PROJECT_REVIEW.md` để biết phạm vi còn
+phải hoàn thiện trước production.
 
 ## Kiến trúc
 
@@ -30,12 +31,17 @@ không cần connection nguồn gốc còn sống.
 
 ## Cài đặt dev local
 
-```bash
+```powershell
+Copy-Item .env.example .env
+# Sửa toàn bộ giá trị change_me trong .env trước khi chạy.
+docker compose config --quiet
 pip install -r requirements.txt
 docker compose up -d
-# Postgres: localhost:5432 (dev/Inda1234, db=data_warehouse) — đã tự tạo schema staging/silver/gold/meta
-# MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
 ```
+
+PostgreSQL chỉ mở tại `127.0.0.1:5432`, MinIO API/Console tại
+`127.0.0.1:9000/9001` và Airflow tại `127.0.0.1:8080`. Tên đăng nhập và mật
+khẩu được đọc từ `.env`; repository không chứa giá trị thật.
 
 ## Dùng CLI
 
@@ -81,6 +87,30 @@ dbt test --profiles-dir .
 Airflow 3 chạy trong Linux containers trên Docker Desktop. Cấu hình local dùng
 `LocalExecutor`, một PostgreSQL metadata riêng và mount trực tiếp `src/dags` vào
 thư mục DAG của Airflow.
+
+### `.env` và tài khoản Airflow
+
+Docker Compose tự đọc file `.env` ở cùng thư mục để thay `${TEN_BIEN}` trong
+`docker-compose.yml`. Các biến Airflow không còn giá trị mặc định trong Compose;
+nếu thiếu, `docker compose config --quiet` sẽ dừng và báo đúng tên biến cần bổ
+sung.
+
+- `AIRFLOW_DB_USER`, `AIRFLOW_DB_PASSWORD`, `AIRFLOW_DB_NAME`: tài khoản của
+  PostgreSQL metadata nội bộ.
+- `AIRFLOW_ADMIN_USERNAME`, `AIRFLOW_ADMIN_PASSWORD`: tài khoản đăng nhập giao
+  diện Airflow.
+- `AIRFLOW_JWT_SECRET`: khóa ký token API; cần là chuỗi ngẫu nhiên dài.
+- `AIRFLOW_UID`: UID Linux của tiến trình trong container; trên Windows có thể
+  giữ `50000`.
+
+`_AIRFLOW_WWW_USER_CREATE` chỉ tạo tài khoản ở lần khởi tạo đầu. Nếu đổi
+`AIRFLOW_ADMIN_PASSWORD` sau khi volume metadata đã tồn tại, đồng bộ lại bằng:
+
+```powershell
+$airflowUser = ((Get-Content .env | Where-Object { $_ -match '^AIRFLOW_ADMIN_USERNAME=' }) -split '=', 2)[1]
+$airflowPassword = ((Get-Content .env | Where-Object { $_ -match '^AIRFLOW_ADMIN_PASSWORD=' }) -split '=', 2)[1]
+docker compose exec airflow-apiserver airflow users reset-password --username $airflowUser --password $airflowPassword
+```
 
 ```powershell
 # Khởi tạo metadata DB và tài khoản admin
@@ -165,21 +195,10 @@ reconciliation đạt 15/15 và metadata DQ liên kết đúng Airflow DAG run.
 
 ## Thứ tự build Dim/Fact (9 layer theo Data Dictionary)
 
-Toàn bộ 43 model trong `dwh_dbt/models/silver/{dim,fact}/` đã được sinh sẵn (skeleton) với
-`ref()` đúng theo 9 layer phụ thuộc đã phân tích từ Data Dictionary. **Không cần tự viết DAG
-resolver/topological sort thủ công** — `dbt run` tự đọc `ref()` trong từng file `.sql` và build
-đúng thứ tự (Dim layer 0 → ... → Fact layer 8), tự động song song hoá các model cùng layer
-không phụ thuộc nhau.
-
-3 model đã có business rule thật (làm mẫu): `dim_partners`, `dim_company`, `fact_distribution`.
-40 model còn lại là **skeleton `select *` + comment `-- TODO`** đánh dấu chỗ cần điền:
-1. Tên bảng staging thật (hiện đang giả định trùng tên model, cần đối chiếu lại `target_staging_table`
-   trong `config/google_sheet_sources.yaml` / `config/db_sources.yaml`).
-2. Điều kiện JOIN thật với các bảng `ref()` đã có sẵn dòng comment gợi ý.
-3. Business rule riêng (unnest GUID, tính cột phái sinh...) theo đúng "Quy tắc" trong Data Dictionary.
-4. Tên cột khóa chính thật trong `_silver_models.yml` (hiện đang giả định convention `<table>_id`,
-   cần sửa lại cho khớp PK/FK thật, ví dụ `dim_partners.partner_id` đã đúng nhưng nhiều bảng khác
-   có thể khác convention).
+Các model trong `dwh_dbt/models/` được nối bằng `ref()` để dbt xác định thứ tự
+phụ thuộc. Hiện còn 3 trường TODO trong `dim_distributed_employee` cần mapping
+nghiệp vụ nguồn thật. Các model khác vẫn cần được đối chiếu với Data Dictionary
+và dữ liệu nguồn trước khi coi là sẵn sàng production.
 
 Build thử riêng 1 nhánh (model đó + mọi thứ nó phụ thuộc):
 ```bash
@@ -211,16 +230,14 @@ dbt docs generate && dbt docs serve
 
 ## TODO khi triển khai thật
 
-- Điền connection thật vào `src/connections.py` (hiện toàn placeholder).
+- Điền connection thật vào `.env`; `src/connections.py` chỉ ánh xạ tên biến và không chứa mật khẩu.
 - Điền `spreadsheet_id` thật + tạo Google Service Account, đặt credential JSON tại
   `config/gsheet_service_account.json`, share quyền view cho service account email lên từng Sheet.
 - Xác nhận watermark column cho các bảng DB hiện đang để `watermark_column: null` (full reload).
 - Bổ sung ~30 entry còn lại trong `config/db_sources.yaml` (mẫu hiện chỉ có vài bảng tiêu biểu)
   và ~25 dbt model còn lại theo 8 layer phụ thuộc đã phân tích từ Data Dictionary.
 - Quyết định SCD Type 1 hay Type 2 cho từng Dim, viết `dwh_dbt/snapshots/*.sql` nếu cần Type 2.
-- Khi sẵn sàng thêm Elasticsearch: viết `ElasticsearchExtractor` (implement `BaseExtractor`),
-  thêm `config/elasticsearch_sources.yaml`, đăng ký trong `extractors/factory.py`,
-  tạo DAG `el_elasticsearch_dag.py` riêng (lịch dày hơn, ví dụ mỗi giờ).
+- Kiểm thử Elasticsearch bằng dữ liệu thật và bổ sung DQ/reconciliation trước khi unpause DAG.
 
 ## Thiết lập Retention Policy Minio 7 ngày
 Bước 1 — Cài MinIO Client (`mc`)
@@ -232,16 +249,38 @@ chmod +x /tmp/mc
 sudo install /tmp/mc /usr/local/bin/mc
 
 mc --version
+```
 
-Bước 2 — Lấy password MinIO runtime
+**Bước 2 — Lấy password MinIO runtime**
+
+```bash
 sudo grep MINIO_ROOT_PASSWORD /etc/systemd/system/minio.service
-Bước 3 — Tạo alias mc đến MinIO
+```
+
+**Bước 3 — Tạo alias mc đến MinIO**
+
+```bash
 read -s MINIO_PASSWORD
+```
+
 Nhập giá trị MINIO_ROOT_PASSWORD ở bước 2 rồi nhấn Enter. Password sẽ không hiển thị trên terminal.
-Bước 4: Kết nối mc đến MinIO hiện tại
-mc alias set dwh-minio http://localhost:9001 hgmedia "$MINIO_PASSWORD"
-Bước 5: Set retention 7 ngày cho toàn bộ raw-bronze
+
+**Bước 4 — Kết nối mc đến MinIO hiện tại**
+
+```bash
+mc alias set dwh-minio http://localhost:9000 hgmedia "$MINIO_PASSWORD"
+```
+
+**Bước 5 — Set retention 7 ngày cho toàn bộ raw-bronze**
+
+```bash
 mc ilm rule add dwh-minio/raw-bronze --expire-days 7
-Bước 6: Xác nhận thành công 
+```
+
+**Bước 6 — Xác nhận thành công**
+
+```bash
 mc ilm rule ls dwh-minio/raw-bronze
+```
+
 Bạn cần thấy rule có DAYS TO EXPIRE là 7

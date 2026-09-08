@@ -260,7 +260,7 @@ db_sources:
     incremental: false
     target_staging_table: "staging.tracking_video_publish_infos"
     load_mode: "truncate"
-    stream_to_staging: false;
+    stream_to_staging: false
 
   # ===== channel_organization =====
   - source_id: "channel"
@@ -392,7 +392,6 @@ db_sources:
     connection: "editing_management"
     source_table: "Editings"
     schema: "dbo"
-    stream_to_staging: false
     watermark_column: null
     incremental: false
     load_mode: "truncate"
@@ -415,7 +414,6 @@ db_sources:
     connection: "editing_management"
     source_table: "Resources"
     schema: "dbo"
-    stream_to_staging: false
     watermark_column: null
     incremental: false
     load_mode: "truncate"

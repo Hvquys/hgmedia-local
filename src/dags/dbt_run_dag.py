@@ -22,7 +22,7 @@ from airflow.sdk import DAG, Param, TaskGroup
 
 PROJECT_ROOT = os.environ.get(
     "DWH_PROJECT_ROOT",
-    "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline"
+    "/opt/airflow/project"
 )
 DBT_DIR = os.path.join(PROJECT_ROOT, "dwh_dbt")
 DBT_BIN = os.environ.get("DBT_BIN", "dbt")
@@ -33,7 +33,7 @@ SILVER_DIM_MODELS = [
     "dim_company_stock", "dim_department", "dim_distributed_employee", "dim_editing",
     "dim_isrc", "dim_khsx", "dim_net", "dim_order_employee", "dim_partners",
     "dim_platform", "dim_po", "dim_project", "dim_project_stock",
-    "dim_purchased_resource", "dim_repository", "dim_resource",
+    "dim_purchased_resource", "dim_repository", "dim_resource", "dim_resources",
     "dim_resource_before_odoo", "dim_so", "dim_stock", "dim_sub_project",
     "dim_subproject_stock", "dim_usd", "dim_video",
 ]
@@ -43,16 +43,25 @@ SILVER_FACT_MODELS = [
     "fact_evaluation_assignment", "fact_khsx_detail", "fact_label_operation",
     "fact_music_evaluation", "fact_po_detail", "fact_purchase_cost",
     "fact_revenue_by_resources", "fact_revenue_distro", "fact_revenue_yt",
+    "fact_revenue_stream_distro", "fact_revenue_view_youtube",
     "fact_so_detail", "fact_view_stream_distro", "fact_view_yt",
     "fact_youtube_operation", "fact_phase6_sales",
 ]
 
 GOLD_MODELS = [
-    "int_stock_video", "mart_resource_channel", "mart_team_usage",
-    "mart_phase6_daily_sales",
+    "fact_hao_hut", "int_stock_video", "mart_avg_sla_ord_disribution",
+    "mart_phase6_daily_sales", "mart_resource_channel", "mart_resource_usage",
+    "mart_resources_video_channel", "mart_team_usage", "mart_ton_kho",
 ]
 
-ALL_MODELS = SILVER_DIM_MODELS + SILVER_FACT_MODELS + GOLD_MODELS
+INTERMEDIATE_MODELS = ["int_excluded_stock_codes", "int_purchase_name_map"]
+
+ALL_MODELS = (
+    SILVER_DIM_MODELS
+    + SILVER_FACT_MODELS
+    + INTERMEDIATE_MODELS
+    + GOLD_MODELS
+)
 
 default_args = {
     "owner": "data-team",
@@ -90,6 +99,7 @@ with DAG(
                 "Nhập tên model muốn chạy. Chỉ có hiệu lực khi layer=custom.\n\n"
                 f"Silver dim: {', '.join(SILVER_DIM_MODELS)}\n\n"
                 f"Silver fact: {', '.join(SILVER_FACT_MODELS)}\n\n"
+                f"Intermediate: {', '.join(INTERMEDIATE_MODELS)}\n\n"
                 f"Gold: {', '.join(GOLD_MODELS)}"
             ),
         ),
@@ -149,6 +159,7 @@ with DAG(
             timeout=3600,
             poke_interval=60,
             mode="reschedule",
+            execution_delta=timedelta(hours=1, minutes=30),
         )
         wait_database = ExternalTaskSensor(
             task_id="wait_el_database",
@@ -156,6 +167,7 @@ with DAG(
             timeout=3600,
             poke_interval=60,
             mode="reschedule",
+            execution_delta=timedelta(hours=3, minutes=30),
         )
         wait_csv = ExternalTaskSensor(
             task_id="wait_el_csv",
@@ -163,6 +175,7 @@ with DAG(
             timeout=3600,
             poke_interval=60,
             mode="reschedule",
+            execution_delta=timedelta(hours=2, minutes=30),
         )
         wait_elastic = ExternalTaskSensor(
             task_id="wait_el_elastic",
@@ -170,6 +183,7 @@ with DAG(
             timeout=7200,
             poke_interval=60,
             mode="reschedule",
+            execution_delta=timedelta(hours=1, minutes=30),
         )
 
     def _prepare_selector(**context):
@@ -195,9 +209,9 @@ with DAG(
             **os.environ,
             "DWH_PG_HOST":     os.environ.get("DWH_PG_HOST", "localhost"),
             "DWH_PG_PORT":     os.environ.get("DWH_PG_PORT", "5432"),
-            "DWH_PG_USER":     os.environ.get("DWH_PG_USER", "hgmedia"),
-            "DWH_PG_PASSWORD": os.environ.get("DWH_PG_PASSWORD", "hgmedia@123"),
-            "DWH_PG_DB":       os.environ.get("DWH_PG_DB", "hgmediadb"),
+            "DWH_PG_USER":     os.environ.get("DWH_PG_USER", ""),
+            "DWH_PG_PASSWORD": os.environ.get("DWH_PG_PASSWORD", ""),
+            "DWH_PG_DB":       os.environ.get("DWH_PG_DB", ""),
         },
     )
 

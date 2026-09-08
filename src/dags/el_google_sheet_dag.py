@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 PROJECT_ROOT = os.environ.get(
     "DWH_PROJECT_ROOT",
-    "/mnt/d/HG_Project/etl_pipeline/dwh-pipeline-mapping/dwh-pipeline"
+    "/opt/airflow/project"
 )
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -23,7 +23,8 @@ ALL_SOURCES = [
     "purchase_cost",
     "resource_before_odoo",
     "resource_performance",
-    "distro_infomation"
+    "distro_infomation",
+    "resource_infomation_add",
 ]
 
 default_args = {

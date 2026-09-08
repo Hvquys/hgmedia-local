@@ -124,7 +124,7 @@ def main():
     p_run.add_argument("--id", help="source_id cụ thể")
     p_run.add_argument(
         "--type",
-        choices=["google_sheet", "sql", "csv", "fx"],
+        choices=["google_sheet", "sql", "csv", "fx", "elastic", "api"],
         help="chạy tất cả nguồn theo loại",
     )
     run_mode = p_run.add_mutually_exclusive_group()

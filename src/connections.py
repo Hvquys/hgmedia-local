@@ -1,8 +1,4 @@
-"""
-connections.py
-Khai báo tập trung mọi connection mà pipeline cần.
-Giá trị thật nên lấy từ ENV / Airflow Connections / Secret Manager — ở đây để placeholder mẫu.
-"""
+"""Khai báo connection; thông tin nhạy cảm chỉ được đọc từ environment."""
 import os
 
 from dotenv import load_dotenv
@@ -32,8 +28,8 @@ CONNECTIONS = {
     # ---- Hạ tầng pipeline ----
     "minio": {
         "endpoint": _env("MINIO_ENDPOINT", "localhost:9000"),
-        "access_key": _env("MINIO_ACCESS_KEY", "minioadmin"),
-        "secret_key": _env("MINIO_SECRET_KEY", "minioadmin"),
+        "access_key": _env("MINIO_ACCESS_KEY"),
+        "secret_key": _env("MINIO_SECRET_KEY"),
         "secure": False,
         "bucket_raw": "raw-bronze",
     },
@@ -42,36 +38,36 @@ CONNECTIONS = {
         "host": _env("DWH_PG_HOST", "localhost"),
         "port": int(_env("DWH_PG_PORT", "5432")),
         "database": _env("DWH_PG_DB", "data_warehouse"),
-        "user": _env("DWH_PG_USER", "dev"),
-        "password": _env("DWH_PG_PASSWORD", "Inda1234"),
+        "user": _env("DWH_PG_USER"),
+        "password": _env("DWH_PG_PASSWORD"),
     },
 
     # ---- Nguồn Database (đọc từ DB có sẵn) ----
     "odoo_pg": {
         "type": "postgresql",
-        "host": _env("ODOO_PG_HOST", "PLACEHOLDER_HOST"),
+        "host": _env("ODOO_PG_HOST"),
         "port": int(_env("ODOO_PG_PORT", "5432")),
         "database": _env("ODOO_PG_DB", "odoo"),
-        "user": _env("ODOO_PG_USER", "PLACEHOLDER_USER"),
-        "password": _env("ODOO_PG_PASSWORD", "PLACEHOLDER_PASS"),
+        "user": _env("ODOO_PG_USER"),
+        "password": _env("ODOO_PG_PASSWORD"),
         "default_schema": "public",
     },
     "hg_stock": {
         "type": "postgresql",
-        "host": _env("HGSTOCK_HOST", "PLACEHOLDER_HOST"),
+        "host": _env("HGSTOCK_HOST"),
         "port": int(_env("HGSTOCK_PORT", "5432")),
         "database": _env("HGSTOCK_DB", "hgstock"),
-        "user": _env("HGSTOCK_USER", "PLACEHOLDER_USER"),
-        "password": _env("HGSTOCK_PASSWORD", "PLACEHOLDER_PASS"),
+        "user": _env("HGSTOCK_USER"),
+        "password": _env("HGSTOCK_PASSWORD"),
         "default_schema": "dbo",
     },
     "editing_management": {
         "type": "sqlserver",
-        "host": _env("EDITING_HOST", "PLACEHOLDER_HOST"),
+        "host": _env("EDITING_HOST"),
         "port": int(_env("EDITING_PORT", "1433")),
         "database": _env("EDITING_DB", "editing-management"),
-        "user": _env("EDITING_USER", "PLACEHOLDER_USER"),
-        "password": _env("EDITING_PASSWORD", "PLACEHOLDER_PASS"),
+        "user": _env("EDITING_USER"),
+        "password": _env("EDITING_PASSWORD"),
         "default_schema": "dbo",
     },
 
@@ -94,11 +90,11 @@ _CHANNEL_DBS = {
 for _name, _db in _CHANNEL_DBS.items():
     CONNECTIONS[_name] = {
         "type": "sqlserver",
-        "host": _env("CHANNEL_HOST", "PLACEHOLDER_HOST"),
+        "host": _env("CHANNEL_HOST"),
         "port": int(_env("CHANNEL_PORT", "1433")),
         "database": _db,
-        "user": _env("CHANNEL_USER", "PLACEHOLDER_USER"),
-        "password": _env("CHANNEL_PASSWORD", "PLACEHOLDER_PASS"),
+        "user": _env("CHANNEL_USER"),
+        "password": _env("CHANNEL_PASSWORD"),
         "default_schema": "dbo",
     }
 
@@ -106,7 +102,23 @@ for _name, _db in _CHANNEL_DBS.items():
 def get_connection(name: str) -> dict:
     if name not in CONNECTIONS:
         raise ValueError(f"Connection '{name}' chưa được khai báo trong connections.py")
-    return CONNECTIONS[name]
+    connection = CONNECTIONS[name]
+    if name == "google_sheet":
+        required_fields = ("credentials_json_path",)
+    elif name == "elastic":
+        required_fields = ("host",)
+    elif name == "minio":
+        required_fields = ("endpoint", "access_key", "secret_key")
+    else:
+        required_fields = ("host", "database", "user", "password")
+
+    missing = [field for field in required_fields if not connection.get(field)]
+    if missing:
+        raise ValueError(
+            f"Connection '{name}' thiếu cấu hình: {', '.join(missing)}. "
+            "Hãy bổ sung biến tương ứng trong .env."
+        )
+    return connection
 
 from urllib.parse import quote_plus
 

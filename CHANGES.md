@@ -22,7 +22,8 @@ Sau: mỗi model select **đúng cột trong Data Dictionary**, có:
 - `description` lấy nguyên văn từ dictionary.
 
 ## 3. `_sources.yml` — dọn sạch, khớp config
-- Bỏ toàn bộ TODO. Quy ước thống nhất: **1 bảng staging / source_id**, tên `staging.<source_id>`.
+- Chuẩn hóa quy ước **1 bảng staging / source_id**, tên `staging.<source_id>`.
+  Hiện còn 3 mapping TODO trong `dim_distributed_employee` cần xác nhận nghiệp vụ.
 
 ## 4. `config/db_sources.yaml` — đồng bộ tên bảng staging
 - Bỏ prefix hệ nguồn: `staging.odoo_dim_project → staging.dim_project`, `staging.channel_dim_company → staging.dim_company`, ... để khớp `source()` trong dbt.
